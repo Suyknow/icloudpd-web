@@ -1,8 +1,11 @@
 import { lazy, Suspense } from "react";
 import {
+  Alert,
+  AlertIcon,
   Box,
   Button,
   Container,
+  Text,
   VStack,
   useDisclosure,
 } from "@chakra-ui/react";
@@ -60,6 +63,17 @@ export function App() {
           });
         }}
       />
+      {auth?.auth_required === false && (
+        <Alert status="warning" justifyContent="center">
+          <AlertIcon />
+          <Text fontSize="sm">
+            <strong>Authentication is disabled</strong> — anyone who can reach
+            this server has full access to your policies and iCloud session.
+            Set <code>PASSWORD_HASH</code> to enable login (see
+            README.docker.md).
+          </Text>
+        </Alert>
+      )}
       <Container maxW="container.xl" py={8}>
         <VStack spacing={8} align="center" width="100%">
           <Box width="100%">

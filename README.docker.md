@@ -17,7 +17,13 @@ docker run -d \
 your policies write photos — mount any host directories your policies'
 `directory` field points at.
 
-The server starts passwordless unless `PASSWORD_HASH` is set (see below).
+> [!WARNING]
+> Without `PASSWORD_HASH` the server starts **passwordless** while binding to
+> `0.0.0.0`: anyone who can reach the port gets full access to your policies,
+> run logs, and iCloud session (and can trigger downloads or deletions). Only
+> run passwordless on a trusted, isolated network — and preferably set
+> `PASSWORD_HASH` anyway (see below). The UI shows a persistent warning
+> banner while authentication is disabled.
 
 ## Environment Variables
 
@@ -35,7 +41,8 @@ The server starts passwordless unless `PASSWORD_HASH` is set (see below).
   ```bash
   docker run --rm spicadust/icloudpd-web:latest icloudpd-web init-password 'yourpw'
   ```
-  If unset, the server runs passwordless and logs a warning on startup.
+  If unset, the server runs passwordless (see the warning above), logs a
+  warning on startup, and the UI shows a persistent banner.
 - `SESSION_SECRET`: stable session secret across restarts. If unset, a random
   one is generated on each boot and all sessions are invalidated on restart.
   Generate with: `python -c "import secrets; print(secrets.token_urlsafe(32))"`

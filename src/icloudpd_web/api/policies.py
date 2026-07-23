@@ -26,6 +26,17 @@ class PasswordBody(BaseModel):
     password: str
 
 
+# Placeholder returned instead of stored SMTP credentials. A PUT carrying
+# this value keeps the stored secret (so read-modify-write from the UI
+# round-trips without ever shipping the real credential to the browser).
+REDACTED = "__redacted__"
+_SMTP_SECRET_KEYS = ("smtp_username", "smtp_password")
+
+
+def _redact_smtp(icloudpd: dict) -> dict:
+    return {k: (REDACTED if k in _SMTP_SECRET_KEYS and v else v) for k, v in icloudpd.items()}
+
+
 def _load_last_run(policy_name: str, data_dir: Path) -> RunSummary | None:
     """Load the most recent run sidecar for *policy_name*, or return None."""
     runs_dir = data_dir / "runs" / policy_name
@@ -65,6 +76,7 @@ def _summary(p: Policy, request: Request) -> dict:
     data_dir: Path = request.app.state.data_dir
     secret_store = request.app.state.secret_store
     data = p.model_dump(mode="json")
+    data["icloudpd"] = _redact_smtp(data["icloudpd"])
     if p.enabled:
         data["next_run_at"] = scheduler.next_run_at(p, after=datetime.now(UTC)).isoformat()
     else:
@@ -92,15 +104,22 @@ def list_policies(request: Request) -> list[dict]:
 
 
 @router.get("/export")
-def export_policies(request: Request) -> Response:
+def export_policies(request: Request, include_secrets: bool = False) -> Response:
     """Return all policies bundled as a single TOML document.
 
     Format: top-level `[[policy]]` array, one entry per policy, each using
-    the same shape as the on-disk per-policy TOML files. Round-trips
-    through the import endpoint without loss.
+    the same shape as the on-disk per-policy TOML files. SMTP credentials
+    are omitted unless ?include_secrets=true is passed explicitly.
     """
     store = request.app.state.policy_store
-    bundle = {"policy": [p.to_toml_dict() for p in store.all()]}
+    entries = []
+    for p in store.all():
+        d = p.to_toml_dict()
+        if not include_secrets and isinstance(d.get("icloudpd"), dict):
+            for key in _SMTP_SECRET_KEYS:
+                d["icloudpd"].pop(key, None)
+        entries.append(d)
+    bundle = {"policy": entries}
     body = tomli_w.dumps(bundle)
     return Response(
         content=body,
@@ -171,6 +190,18 @@ def get_policy(name: str, request: Request) -> dict:
 def put_policy(name: str, body: dict, request: Request) -> dict:
     if body.get("name") != name:
         raise ValidationError("name in URL must match body.name", field="name")
+    # Resolve redaction placeholders back to the stored secrets so an edit
+    # round-trip (GET → modify → PUT) keeps SMTP credentials intact.
+    incoming = body.get("icloudpd")
+    if isinstance(incoming, dict):
+        existing = request.app.state.policy_store.get(name)
+        for key in _SMTP_SECRET_KEYS:
+            if incoming.get(key) == REDACTED:
+                stored = existing.icloudpd.get(key) if existing is not None else None
+                if stored is not None:
+                    incoming[key] = stored
+                else:
+                    incoming.pop(key)
     try:
         policy = Policy(**body)
     except PydanticValidationError as e:

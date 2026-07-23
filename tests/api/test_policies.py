@@ -1,11 +1,15 @@
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from icloudpd_web.app import create_app
 from icloudpd_web.auth import Authenticator
+
+from .conftest import make_policy_body
 
 
 FAKE = Path(__file__).resolve().parent.parent / "fixtures" / "fake_icloudpd.py"
@@ -243,3 +247,66 @@ def test_requires_auth(tmp_path: Path) -> None:
     c = TestClient(app)
     r = c.get("/policies")
     assert r.status_code == 401
+
+
+def test_smtp_credentials_redacted_in_get(app_factory: Callable[..., FastAPI]) -> None:
+    app = app_factory()
+    with TestClient(app) as client:
+        client.post("/auth/login", json={"password": "pw"})
+        body = make_policy_body("p")
+        body["icloudpd"] = {
+            "smtp_username": "mailer@example.com",
+            "smtp_password": "hunter2",
+            "smtp_host": "smtp.example.com",
+        }
+        r = client.put("/policies/p", json=body)
+        assert r.status_code == 200
+        # PUT response and both GET endpoints must not leak the secrets.
+        assert r.json()["icloudpd"]["smtp_password"] == "__redacted__"
+        assert r.json()["icloudpd"]["smtp_username"] == "__redacted__"
+        for payload in (client.get("/policies").json()[0], client.get("/policies/p").json()):
+            assert payload["icloudpd"]["smtp_password"] == "__redacted__"
+            assert payload["icloudpd"]["smtp_username"] == "__redacted__"
+            assert payload["icloudpd"]["smtp_host"] == "smtp.example.com"
+
+
+def test_smtp_redaction_roundtrip_keeps_stored_secret(
+    app_factory: Callable[..., FastAPI],
+) -> None:
+    """PUT with the redaction placeholder must keep the stored credential."""
+    app = app_factory()
+    with TestClient(app) as client:
+        client.post("/auth/login", json={"password": "pw"})
+        body = make_policy_body("p")
+        body["icloudpd"] = {"smtp_username": "mailer@example.com", "smtp_password": "hunter2"}
+        client.put("/policies/p", json=body)
+
+        # Simulate the UI: GET (redacted), tweak something else, PUT back.
+        fetched = client.get("/policies/p").json()
+        update = make_policy_body("p")
+        update["icloudpd"] = fetched["icloudpd"]
+        update["icloudpd"]["smtp_host"] = "smtp.new.example.com"
+        r = client.put("/policies/p", json=update)
+        assert r.status_code == 200
+
+        stored = app.state.policy_store.get("p")
+        assert stored.icloudpd["smtp_password"] == "hunter2"
+        assert stored.icloudpd["smtp_username"] == "mailer@example.com"
+        assert stored.icloudpd["smtp_host"] == "smtp.new.example.com"
+
+
+def test_export_omits_smtp_secrets_by_default(app_factory: Callable[..., FastAPI]) -> None:
+    app = app_factory()
+    with TestClient(app) as client:
+        client.post("/auth/login", json={"password": "pw"})
+        body = make_policy_body("p")
+        body["icloudpd"] = {"smtp_username": "mailer@example.com", "smtp_password": "hunter2"}
+        client.put("/policies/p", json=body)
+
+        default = client.get("/policies/export").text
+        assert "hunter2" not in default
+        assert "mailer@example.com" not in default
+
+        with_secrets = client.get("/policies/export?include_secrets=true").text
+        assert "hunter2" in with_secrets
+        assert "mailer@example.com" in with_secrets
