@@ -128,6 +128,28 @@ class Policy(BaseModel):
         return cleaned
 
     @model_validator(mode="after")
+    def _filters_vs_icloud_delete(self) -> Policy:
+        """Reject post-download filters combined with iCloud-side deletion.
+
+        With delete_after_download / keep_icloud_recent_days, icloudpd removes
+        the asset from iCloud once downloaded; if a filter then deletes the
+        local copy, the photo is gone everywhere. Refuse the combination.
+        """
+        if self.filters.is_empty():
+            return self
+        if self.icloudpd.get("delete_after_download") or (
+            self.icloudpd.get("keep_icloud_recent_days") is not None
+        ):
+            raise ValueError(
+                "post-download filters cannot be combined with "
+                "delete_after_download or keep_icloud_recent_days: icloudpd "
+                "deletes the photo from iCloud after download, and the filter "
+                "would then delete the local copy — the photo would be lost "
+                "everywhere. Remove the filters or the iCloud deletion option."
+            )
+        return self
+
+    @model_validator(mode="after")
     def _migrate_library(self) -> Policy:
         """Back-compat: map legacy icloudpd.library strings onto library_kind.
 

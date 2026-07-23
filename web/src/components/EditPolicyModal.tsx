@@ -602,6 +602,14 @@ export function EditPolicyModal({
                   filter_device_models: formData.filter_device_models,
                 }}
                 onChange={(key, value) => update(key, value)}
+                icloudDeleteConfigured={
+                  formData.keep_icloud_recent_days !== null ||
+                  Boolean(
+                    (formData as unknown as Record<string, unknown>)[
+                      "delete_after_download"
+                    ]
+                  )
+                }
               />
             </Box>
 

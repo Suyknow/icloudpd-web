@@ -296,12 +296,22 @@ interface PostDownloadFiltersSectionProps {
     key: K,
     value: PostDownloadFilterValues[K]
   ) => void;
+  /** True when the policy also deletes assets from iCloud after download
+   * (delete_after_download / keep_icloud_recent_days). That combination is
+   * rejected by the server: the filter would delete the only remaining copy. */
+  icloudDeleteConfigured?: boolean;
 }
 
 export function PostDownloadFiltersSection({
   values,
   onChange,
+  icloudDeleteConfigured = false,
 }: PostDownloadFiltersSectionProps) {
+  const anyFilterConfigured =
+    values.filter_file_suffixes.length > 0 ||
+    values.filter_match_patterns.length > 0 ||
+    values.filter_device_makes.length > 0 ||
+    values.filter_device_models.length > 0;
   return (
     <VStack spacing={4} align="stretch">
       <Alert status="warning" borderRadius="md" fontSize="sm">
@@ -309,9 +319,21 @@ export function PostDownloadFiltersSection({
         <Text>
           These filters run <strong>AFTER</strong> icloudpd finishes. Files are
           downloaded first, then deleted if they don&apos;t match. Bandwidth is{" "}
-          <strong>NOT</strong> saved.
+          <strong>NOT</strong> saved. Filters cannot be combined with
+          &quot;Delete from iCloud after download&quot; — deleted-from-iCloud
+          photos that a filter then removes locally would be lost everywhere.
         </Text>
       </Alert>
+      {icloudDeleteConfigured && anyFilterConfigured && (
+        <Alert status="error" borderRadius="md" fontSize="sm">
+          <AlertIcon />
+          <Text>
+            This policy deletes photos from iCloud after download. Saving will
+            be rejected while filters are configured — clear the filters below
+            or disable &quot;Delete from iCloud after download&quot;.
+          </Text>
+        </Alert>
+      )}
       <ChipInputField
         label="File Extensions"
         info="Keep only files with these extensions (case-insensitive). E.g. .heic, .jpg — press Enter or comma to add."
