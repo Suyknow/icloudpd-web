@@ -41,6 +41,10 @@ class Runner:
         self._active: dict[str, Run] = {}
         self._by_id: dict[str, Run] = {}
         self._lock = asyncio.Lock()
+        # Serialize runs per Apple ID: concurrent runs for the same username
+        # share cookie/session files and can clobber each other's session
+        # (forcing double 2FA). Maps username -> policy name holding it.
+        self._busy_users: dict[str, str] = {}
         # Resolved shared-library names keyed by policy name. Populated on
         # first discovery per backend-process lifetime; cleared on restart.
         self._shared_lib_cache: dict[str, str] = {}
@@ -48,6 +52,20 @@ class Runner:
     def is_running(self, name: str) -> bool:
         run = self._active.get(name)
         return run is not None and run.status == "running"
+
+    def _claim_user(self, username: str, policy_name: str) -> None:
+        """Claim the Apple ID for one run; raises if another policy holds it."""
+        holder = self._busy_users.get(username)
+        if holder is not None:
+            raise RuntimeError(
+                f"policy {holder!r} is already running for Apple ID {username}; "
+                "runs sharing an account are serialized to protect its session"
+            )
+        self._busy_users[username] = policy_name
+
+    def _release_user(self, username: str, policy_name: str) -> None:
+        if self._busy_users.get(username) == policy_name:
+            del self._busy_users[username]
 
     def get_run(self, run_id: str) -> Run | None:
         return self._by_id.get(run_id)
@@ -84,43 +102,48 @@ class Runner:
         async with self._lock:
             if self.is_running(policy.name):
                 raise RuntimeError(f"policy {policy.name} already running")
-            run_id = _mk_run_id(policy.name)
-            log_dir = self._runs_base / policy.name
-            log_dir.mkdir(parents=True, exist_ok=True)
+            self._claim_user(policy.username, policy.name)
+            try:
+                run_id = _mk_run_id(policy.name)
+                log_dir = self._runs_base / policy.name
+                log_dir.mkdir(parents=True, exist_ok=True)
 
-            argv_tail = build_argv(
-                effective_policy,
-                default_cookie_directory=self._ensure_cookie_directory(),
-            )
-            argv = self._argv_fn(argv_tail)
+                argv_tail = build_argv(
+                    effective_policy,
+                    default_cookie_directory=self._ensure_cookie_directory(),
+                )
+                argv = self._argv_fn(argv_tail)
 
-            on_mfa_needed = None
-            if self._mfa_registry is not None:
-                reg = self._mfa_registry
+                on_mfa_needed = None
+                if self._mfa_registry is not None:
+                    reg = self._mfa_registry
 
-                def on_mfa_needed(pname: str) -> Path:  # noqa: E306
-                    path = reg.register(pname).path
-                    # `run` is bound below, before the subprocess can prompt.
-                    self._on_event(run, "mfa_required")
-                    return path
+                    def on_mfa_needed(pname: str) -> Path:  # noqa: E306
+                        path = reg.register(pname).path
+                        # `run` is bound below, before the subprocess can prompt.
+                        self._on_event(run, "mfa_required")
+                        return path
 
-            run = Run(
-                run_id=run_id,
-                policy_name=policy.name,
-                argv=argv,
-                log_dir=log_dir,
-                password=password,
-                on_mfa_needed=on_mfa_needed,
-                filters=policy.filters if not policy.filters.is_empty() else None,
-                dry_run=bool(policy.icloudpd.get("dry_run", False)),
-                target_directory=policy.directory,
-                folder_structure_pattern=policy.icloudpd.get("folder_structure"),
-                mfa_timeout=self._mfa_timeout,
-            )
-            self._active[policy.name] = run
-            self._by_id[run_id] = run
-            await run.start()
-            asyncio.create_task(self._on_complete(run))
+                run = Run(
+                    run_id=run_id,
+                    policy_name=policy.name,
+                    argv=argv,
+                    log_dir=log_dir,
+                    password=password,
+                    on_mfa_needed=on_mfa_needed,
+                    filters=policy.filters if not policy.filters.is_empty() else None,
+                    dry_run=bool(policy.icloudpd.get("dry_run", False)),
+                    target_directory=policy.directory,
+                    folder_structure_pattern=policy.icloudpd.get("folder_structure"),
+                    mfa_timeout=self._mfa_timeout,
+                )
+                self._active[policy.name] = run
+                self._by_id[run_id] = run
+                await run.start()
+            except BaseException:
+                self._release_user(policy.username, policy.name)
+                raise
+            asyncio.create_task(self._on_complete(run, username=policy.username))
             self._on_event(run, "started")
             return run
 
@@ -191,6 +214,7 @@ class Runner:
         async with self._lock:
             if self.is_running(policy.name):
                 raise RuntimeError(f"policy {policy.name} already running")
+            self._claim_user(policy.username, policy.name)
             run_id = _mk_run_id(policy.name)
             log_dir = self._runs_base / policy.name
             log_dir.mkdir(parents=True, exist_ok=True)
@@ -232,17 +256,26 @@ class Runner:
                 filters=None,
                 mfa_timeout=self._mfa_timeout,
             )
-            self._active[policy.name] = run
-            self._by_id[run_id] = run
-            await run.start()
+            try:
+                self._active[policy.name] = run
+                self._by_id[run_id] = run
+                await run.start()
+            except BaseException:
+                self._release_user(policy.username, policy.name)
+                raise
             asyncio.create_task(self._on_complete(run))
             self._on_event(run, "started")
 
+        # Release synchronously (not via _on_complete) so a follow-up
+        # download start for the same policy can claim the Apple ID
+        # immediately without racing the background completion task.
         try:
             await asyncio.wait_for(run.wait(), timeout=timeout)
         except TimeoutError:
             await run.stop()
             raise RuntimeError("library discovery timed out") from None
+        finally:
+            self._release_user(policy.username, policy.name)
 
         if run.exit_code != 0:
             raise RuntimeError(
@@ -251,8 +284,10 @@ class Runner:
 
         return parse_library_names(run.log_path.read_text(encoding="utf-8", errors="replace"))
 
-    async def _on_complete(self, run: Run) -> None:
+    async def _on_complete(self, run: Run, username: str | None = None) -> None:
         await run.wait()
+        if username is not None:
+            self._release_user(username, run.policy_name)
         if self._mfa_registry is not None:
             with contextlib.suppress(Exception):
                 self._mfa_registry.cleanup(run.policy_name)

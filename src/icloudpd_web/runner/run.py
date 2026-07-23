@@ -121,6 +121,11 @@ class Run:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
+            # Detach the child from our controlling terminal: icloudpd's
+            # getpass reads /dev/tty when one exists, so a backend started
+            # from a terminal would hang forever waiting for the password
+            # there instead of reading it from the stdin pipe.
+            start_new_session=True,
         )
         assert self._proc.stdout is not None
         assert self._proc.stderr is not None
