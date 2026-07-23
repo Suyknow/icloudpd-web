@@ -256,7 +256,7 @@ export function EditPolicyModal({
                 <FormControl>
                   <FieldWithInfo
                     label="Timezone"
-                    info="IANA timezone name used to interpret the cron schedule (e.g. 'America/Los_Angeles'). Leave blank for server default."
+                    info="IANA timezone name used to interpret the cron schedule (e.g. 'America/Los_Angeles'). Leave blank to use the server's local timezone."
                   >
                     <Input
                       value={formData.timezone ?? ""}
@@ -264,7 +264,7 @@ export function EditPolicyModal({
                         update("timezone", e.target.value || null)
                       }
                       maxW="200px"
-                      placeholder="UTC"
+                      placeholder="server timezone"
                       isDisabled={!formData.enabled}
                     />
                   </FieldWithInfo>

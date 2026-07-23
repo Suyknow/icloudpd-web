@@ -110,6 +110,20 @@ export const PolicyRow = ({ policy }: PolicyRowProps) => {
             ? "wrong iCloud password — update it in the policy"
             : "failed";
 
+  // Localized "next scheduled run" text (server sends an ISO timestamp with
+  // offset; Date renders it in the viewer's zone).
+  const nextRunText = useMemo(() => {
+    if (!policy.enabled || !policy.next_run_at) return null;
+    const d = new Date(policy.next_run_at);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }, [policy.enabled, policy.next_run_at]);
+
   // Derive raw counters for the status text. The progress bar itself is
   // indeterminate while running, so we no longer compute a percentage.
   const { downloaded, total } = useMemo(() => {
@@ -322,6 +336,14 @@ export const PolicyRow = ({ policy }: PolicyRowProps) => {
               <Text>{policy.username}</Text>
               <Text>•</Text>
               <Text>{policy.directory}</Text>
+              {nextRunText && (
+                <>
+                  <Text>•</Text>
+                  <Text title={policy.next_run_at ?? undefined}>
+                    next run {nextRunText}
+                  </Text>
+                </>
+              )}
             </Flex>
           </Box>
           <Box width="150px" display="flex">

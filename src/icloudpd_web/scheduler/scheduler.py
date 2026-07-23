@@ -52,7 +52,9 @@ class Scheduler:
         self._pending: list[Policy] = []
 
     def next_run_at(self, policy: Policy, *, after: datetime) -> datetime:
-        return croniter(policy.cron, after).get_next(datetime)
+        # Evaluate the cron in the same zone tick() fires in — otherwise the
+        # advertised next_run_at is hours off for non-UTC policies.
+        return croniter(policy.cron, self._localize(after, policy)).get_next(datetime)
 
     def tick(self, now: datetime) -> None:
         for p in self._store.all():
@@ -110,10 +112,13 @@ class Scheduler:
 
     @staticmethod
     def _localize(now: datetime, policy: Policy) -> datetime:
-        if policy.timezone is None:
-            return now  # preserve naive/aware as-is
-        tz = zoneinfo.ZoneInfo(policy.timezone)
+        """Convert *now* into the zone the policy's cron is interpreted in.
+
+        A blank timezone means the server's local zone (as the UI promises),
+        not UTC. Naive inputs are treated as UTC.
+        """
         if now.tzinfo is None:
-            # Treat naive as UTC for localization consistency.
-            return now.replace(tzinfo=UTC).astimezone(tz)
-        return now.astimezone(tz)
+            now = now.replace(tzinfo=UTC)
+        if policy.timezone is None:
+            return now.astimezone()  # server's local zone
+        return now.astimezone(zoneinfo.ZoneInfo(policy.timezone))
