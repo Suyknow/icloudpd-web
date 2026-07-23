@@ -4,8 +4,20 @@
 Parses flags with argparse so that unknown flags cause a non-zero exit,
 catching flag-name drift between our config_builder and the real binary.
 
+Faithful to the real icloudpd 1.32.3 console flow:
+  - password prompt uses getpass (reads /dev/tty when a controlling
+    terminal exists; falls back to stdin otherwise)
+  - MFA prompt lines are exactly "Two-factor authentication is required (2fa)"
+    / "Two-step authentication is required (2sa)"
+  - a successful code logs a multi-line banner containing the line
+    "the two-factor authentication expires."
+  - a rejected code logs "Failed to verify two-factor authentication code"
+    and EXITS with code 1 (no re-prompt)
+  - "Downloaded <path>" INFO lines middle-truncate paths >96 chars with "..."
+
 Behavior driven by env vars:
-  FAKE_ICLOUDPD_MODE: one of 'success', 'fail', 'slow', 'mfa', 'filter_demo'
+  FAKE_ICLOUDPD_MODE: one of 'success', 'fail', 'slow', 'mfa', 'mfa_reject',
+    'mfa_2sa', 'filter_demo'
   FAKE_ICLOUDPD_TOTAL: default 5
   FAKE_ICLOUDPD_SLEEP: seconds between progress lines (default 0.01)
   FAKE_ICLOUDPD_DIR: target directory for filter_demo mode
@@ -77,7 +89,16 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main() -> int:  # noqa: C901
+def _print_mfa_success_banner() -> None:
+    """The multi-line banner real icloudpd 1.32.3 logs after a code is accepted."""
+    print("INFO     Great, you're all set up. The script can now be run without", flush=True)
+    print("INFO     user interaction until 2SA/2FA is expired.", flush=True)
+    print("INFO     You can set up email notifications for when", flush=True)
+    print("INFO     the two-factor authentication expires.", flush=True)
+    print("INFO     (Use --help to view information about SMTP options.)", flush=True)
+
+
+def main() -> int:  # noqa: C901, PLR0911, PLR0912
     parser = _build_parser()
     args = parser.parse_args()
 
@@ -87,9 +108,14 @@ def main() -> int:  # noqa: C901
 
     print("INFO     starting", flush=True)
 
-    # Read password from stdin (--password-provider console delivers it as a line).
     if args.password_provider == "console":
-        _password = sys.stdin.readline().strip()  # consume; fake doesn't authenticate
+        # Real icloudpd's console provider uses getpass, which reads
+        # /dev/tty when a controlling terminal exists and only falls back
+        # to stdin without one (this is why the wrapper must detach the
+        # child from the tty via start_new_session).
+        import getpass
+
+        _password = getpass.getpass("Enter iCloud password: ")
 
     if getattr(args, "list_libraries", False):
         # Mirror real icloudpd: print library names, one per line, then exit 0.
@@ -100,22 +126,29 @@ def main() -> int:  # noqa: C901
         return 0
 
     if mode == "mfa":
-        print("INFO     Two-step authentication required.", flush=True)
+        print("Two-factor authentication is required (2fa)", flush=True)
         code = sys.stdin.readline().strip()
         if code:
-            print(f"INFO     Received MFA code of length {len(code)}", flush=True)
+            _print_mfa_success_banner()
 
-    if mode == "mfa_reprompt":
-        # Simulate icloudpd rejecting the first code and re-prompting.
-        # The Run should detect the second "Two-step" line, call
-        # on_mfa_needed again, and forward the next code via stdin.
-        print("INFO     Two-step authentication required.", flush=True)
-        first = sys.stdin.readline().strip()
-        print(f"INFO     First code rejected (was {len(first)} chars)", flush=True)
-        print("INFO     Two-step authentication required.", flush=True)
-        second = sys.stdin.readline().strip()
-        if second:
-            print(f"INFO     Received MFA code of length {len(second)}", flush=True)
+    if mode == "mfa_reject":
+        # Real 1.32.3 EXITS on a rejected code — there is no console re-prompt.
+        print("Two-factor authentication is required (2fa)", flush=True)
+        _code = sys.stdin.readline().strip()
+        print("ERROR    Failed to verify two-factor authentication code", flush=True)
+        return 1
+
+    if mode == "mfa_2sa":
+        # Legacy two-step auth prompts for a trusted-device INDEX and loops
+        # on input() — a single 6-digit code can never answer it.
+        print("Two-step authentication is required (2sa)", flush=True)
+        print("  0: SMS to *******12", flush=True)
+        print("Please choose an option: [0]: ", flush=True)
+        while True:
+            line = sys.stdin.readline()
+            if not line:  # stdin closed; parent killed us or gave up
+                return 1
+            print("Please choose an option: [0]: ", flush=True)
 
     if mode == "fail":
         print("ERROR    something went wrong", file=sys.stderr, flush=True)
@@ -160,6 +193,17 @@ def _write_minimal_heic(path: str, make: str, model: str) -> None:
     img.save(path, format="HEIF", exif=exif.tobytes())
 
 
+def _truncate_middle(s: str, n: int = 96) -> str:
+    """Middle-truncate like real icloudpd does for Downloaded log lines."""
+    if len(s) <= n:
+        return s
+    if n <= 3:
+        return "..."[:n]
+    n_2 = (n - 3) // 2
+    n_1 = n - 3 - n_2
+    return f"{s[:n_1]}...{s[-n_2:]}"
+
+
 def _write_minimal_png(path: str) -> None:
     """Write a minimal 1x1 PNG file without EXIF data."""
     from PIL import Image
@@ -186,7 +230,7 @@ def _run_filter_demo() -> int:
             _write_minimal_jpeg_with_exif(file_path, make, model)
         else:
             _write_minimal_png(file_path)
-        print(f"INFO     Downloaded {file_path}", flush=True)
+        print(f"INFO     Downloaded {_truncate_middle(file_path)}", flush=True)
 
     print("INFO     done", flush=True)
     return 0

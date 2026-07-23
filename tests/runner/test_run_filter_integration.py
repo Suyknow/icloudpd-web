@@ -54,6 +54,9 @@ async def test_filter_demo_keeps_heic_apple_only(
         log_dir=tmp_path / "logs",
         password="pw",
         filters=filters,
+        # Needed to resolve icloudpd's middle-truncated Downloaded paths
+        # (pytest tmp paths routinely exceed the 96-char truncation limit).
+        target_directory=target_dir,
     )
     await run.start()
     await run.wait()
@@ -132,6 +135,7 @@ async def test_filter_device_make_only(
         log_dir=tmp_path / "logs3",
         password="pw",
         filters=filters,
+        target_directory=target_dir,
     )
     await run.start()
     await run.wait()
@@ -147,3 +151,29 @@ async def test_filter_device_make_only(
     assert (target_dir / "other.png").exists()
     log_text = run.log_path.read_text()
     assert "WARNING  Filter: kept" in log_text
+
+
+def test_resolve_downloaded_path_truncated(tmp_path: Path) -> None:
+    """icloudpd middle-truncates >96-char paths in Downloaded lines; the Run
+    must map them back to the real file (or skip when ambiguous)."""
+    nested = tmp_path / ("a" * 60) / ("b" * 40)
+    nested.mkdir(parents=True)
+    real = nested / "IMG_0001.heic"
+    real.write_bytes(b"x")
+
+    run = Run(
+        run_id="t",
+        policy_name="p",
+        argv=["true"],
+        log_dir=tmp_path / "logs",
+        target_directory=tmp_path,
+    )
+
+    full = str(real)
+    assert len(full) > 96
+    truncated = f"{full[:40]}...{full[-40:]}"
+    assert run._resolve_downloaded_path(truncated) == real
+    # Untruncated paths pass through untouched.
+    assert run._resolve_downloaded_path(full) == real
+    # Ambiguous/unresolvable tails are skipped.
+    assert run._resolve_downloaded_path("nope...zzz_does_not_exist.jpg") is None

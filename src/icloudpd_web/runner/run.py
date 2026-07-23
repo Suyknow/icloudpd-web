@@ -20,7 +20,15 @@ if TYPE_CHECKING:
 
 
 PROGRESS_RE = re.compile(r"Downloading\s+(\d+)\s+of\s+(\d+)", re.IGNORECASE)
-MFA_PROMPT_RE = re.compile(r"Two-step|two.?factor", re.IGNORECASE)
+# Anchor MFA detection on the exact prompt lines real icloudpd 1.32.3 emits.
+# A loose "two.?factor" match would also fire on the post-success banner
+# ("...the two-factor authentication expires.") and the rejection error
+# ("Failed to verify two-factor authentication code"), re-opening the modal
+# after every successful interactive 2FA.
+MFA_PROMPT_RE = re.compile(
+    r"Two-factor authentication is required \(2fa\)"
+    r"|Two-step authentication is required \(2sa\)"
+)
 _TS_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\s")
 # Match icloudpd's "Downloaded <path>" line anywhere on the line — real
 # output is timestamp-prefixed ("2026-04-20 11:17:10 INFO     Downloaded ...").
@@ -172,15 +180,44 @@ class Run:
         m = DOWNLOADED_RE.search(text)
         if not m:
             return
-        path = Path(m.group(1).strip())
         # Apply filter per-file so deletion happens as soon as possible.
         # Dry-run writes no files, so filter evaluation would fail; skip.
         if self._filters is None or self._filters.is_empty() or self._dry_run:
+            return
+        path = self._resolve_downloaded_path(m.group(1).strip())
+        if path is None:
             return
         # Prune completed tasks so this list doesn't grow unboundedly during
         # a long run (one task per downloaded file).
         self._filter_tasks = [t for t in self._filter_tasks if not t.done()]
         self._filter_tasks.append(asyncio.create_task(self._filter_one(path)))
+
+    def _resolve_downloaded_path(self, raw: str) -> Path | None:
+        """Recover the real file path from a "Downloaded" log line.
+
+        icloudpd middle-truncates paths longer than 96 chars with "..." in its
+        log output, so the logged path may not exist on disk. Resolve it by
+        matching the untruncated tail against files under the target
+        directory; skip (with a warning) when that is impossible or ambiguous.
+        """
+        if "..." not in raw:
+            return Path(raw)
+        tail = raw.rsplit("...", 1)[-1]
+        if self._target_directory is None or not tail:
+            self._emit_log(
+                f"WARNING  Filter: cannot resolve truncated path {raw!r}; skipping filter"
+            )
+            return None
+        candidates = [
+            p for p in self._target_directory.rglob("*") if p.is_file() and str(p).endswith(tail)
+        ]
+        if len(candidates) != 1:
+            self._emit_log(
+                f"WARNING  Filter: truncated path {raw!r} matched "
+                f"{len(candidates)} files under {self._target_directory}; skipping filter"
+            )
+            return None
+        return candidates[0]
 
     async def _filter_one(self, path: Path) -> None:
         """Evaluate one downloaded file against the configured filters.
