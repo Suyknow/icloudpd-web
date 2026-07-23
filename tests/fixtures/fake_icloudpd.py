@@ -147,12 +147,17 @@ def _write_minimal_jpeg_with_exif(path: str, make: str, model: str) -> None:
 
 
 def _write_minimal_heic(path: str, make: str, model: str) -> None:
-    """Write a minimal JPEG saved with .heic extension (for testing suffix filtering).
+    """Write a real HEIC file with Make and Model EXIF tags via pillow-heif."""
+    from PIL import Image
+    from pillow_heif import register_heif_opener
 
-    Note: Pillow cannot write real HEIC files. We write a JPEG but name it .heic.
-    The post_filter EXIF reader (via PIL) will still be able to read it.
-    """
-    _write_minimal_jpeg_with_exif(path, make, model)
+    register_heif_opener()
+    img = Image.new("RGB", (16, 16), color=(128, 128, 128))
+    exif = img.getexif()
+    # EXIF tag IDs: Make=271, Model=272
+    exif[271] = make
+    exif[272] = model
+    img.save(path, format="HEIF", exif=exif.tobytes())
 
 
 def _write_minimal_png(path: str) -> None:
@@ -175,7 +180,9 @@ def _run_filter_demo() -> int:
     ]
 
     for file_path, kind, make, model in files:
-        if kind in ("heic", "jpg") and make and model:
+        if kind == "heic" and make and model:
+            _write_minimal_heic(file_path, make, model)
+        elif kind == "jpg" and make and model:
             _write_minimal_jpeg_with_exif(file_path, make, model)
         else:
             _write_minimal_png(file_path)

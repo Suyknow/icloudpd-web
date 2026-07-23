@@ -13,6 +13,9 @@ class FilterDecision:
     path: Path
     kept: bool
     reason: str
+    # True when the file was kept only because its EXIF could not be read
+    # (fail-open); callers should surface this as a warning.
+    warning: bool = False
 
 
 _IMAGE_SUFFIXES: frozenset[str] = frozenset(
@@ -33,10 +36,26 @@ _IMAGE_SUFFIXES: frozenset[str] = frozenset(
 )
 
 
+_heif_registered = False
+
+
+def _ensure_heif_opener() -> None:
+    """Register pillow-heif so PIL can open .heic/.heif files."""
+    global _heif_registered  # noqa: PLW0603
+    if _heif_registered:
+        return
+    _heif_registered = True
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener()
+
+
 def _read_exif_make_model(path: Path) -> tuple[str | None, str | None]:
     """Return (Make, Model) from EXIF, or (None, None) if unreadable."""
     try:
         from PIL import ExifTags, Image
+
+        _ensure_heif_opener()
 
         with Image.open(path) as img:
             exif = img.getexif()
@@ -65,11 +84,18 @@ def _check_exif(path: Path, filters: Filters) -> FilterDecision | None:
 
     make, model = _read_exif_make_model(path)
 
+    # Fail-open on unreadable EXIF: Pillow (even with pillow-heif) cannot
+    # open every format Apple serves (RAW: .dng/.cr2/.nef/.arw). Deleting
+    # on "can't read" would mass-delete real photos, so keep the file and
+    # flag the decision as a warning instead.
     if filters.device_makes:
         wanted_makes = [x.strip().lower() for x in filters.device_makes if x.strip()]
         if make is None:
             return FilterDecision(
-                path, False, "EXIF Make unreadable; device_makes filter configured"
+                path,
+                True,
+                "EXIF Make unreadable; keeping file (device_makes filter not applied)",
+                warning=True,
             )
         make_lc = make.lower()
         if not any(w in make_lc for w in wanted_makes):
@@ -81,7 +107,10 @@ def _check_exif(path: Path, filters: Filters) -> FilterDecision | None:
         wanted_models = [x.strip().lower() for x in filters.device_models if x.strip()]
         if model is None:
             return FilterDecision(
-                path, False, "EXIF Model unreadable; device_models filter configured"
+                path,
+                True,
+                "EXIF Model unreadable; keeping file (device_models filter not applied)",
+                warning=True,
             )
         model_lc = model.lower()
         if not any(w in model_lc for w in wanted_models):
@@ -98,7 +127,8 @@ def evaluate(path: Path, filters: Filters) -> FilterDecision:
     AND across fields, OR within a field.
     - file_suffixes: case-insensitive extension match.
     - match_patterns: regex applied to basename; any match passes.
-    - device_makes / device_models: EXIF Make/Model; fail-closed on unreadable EXIF.
+    - device_makes / device_models: EXIF Make/Model; fail-open on unreadable EXIF
+      (file kept, decision flagged as warning).
       Non-image files (videos, etc.) skip EXIF filters entirely.
     """
     suffix = path.suffix.lower()

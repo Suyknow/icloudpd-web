@@ -191,7 +191,8 @@ class Run:
             return
         if decision.kept:
             self._filter_kept += 1
-            self._emit_log(f"INFO     Filter: kept {path} ({decision.reason})")
+            level = "WARNING " if decision.warning else "INFO    "
+            self._emit_log(f"{level} Filter: kept {path} ({decision.reason})")
             return
         try:
             await loop.run_in_executor(None, os.unlink, decision.path)

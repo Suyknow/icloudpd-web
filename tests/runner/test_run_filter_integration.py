@@ -142,6 +142,8 @@ async def test_filter_device_make_only(
     assert (target_dir / "img_apple.heic").exists()
     # Samsung JPG: Make=Samsung → deleted
     assert not (target_dir / "img_samsung.jpg").exists()
-    # PNG: non-image-extension? .png IS in _image_suffixes, so EXIF will be checked.
-    # _write_minimal_png produces no EXIF Make → "EXIF Make unreadable" → deleted.
-    assert not (target_dir / "other.png").exists()
+    # PNG: .png IS in _image_suffixes so EXIF is checked, but it has no EXIF
+    # Make → fail-open: kept, with a WARNING logged.
+    assert (target_dir / "other.png").exists()
+    log_text = run.log_path.read_text()
+    assert "WARNING  Filter: kept" in log_text

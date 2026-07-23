@@ -161,7 +161,7 @@ def test_device_make_substring_no_false_positives(tmp_path: Path) -> None:
         assert "Apple" in d.reason
 
 
-def test_device_make_exif_unreadable(tmp_path: Path) -> None:
+def test_device_make_exif_unreadable_fails_open(tmp_path: Path) -> None:
     img = tmp_path / "photo.jpg"
     img.write_bytes(b"fake")
     f = Filters(device_makes=["Apple"])
@@ -170,11 +170,12 @@ def test_device_make_exif_unreadable(tmp_path: Path) -> None:
         side_effect=_make_exif_mock(None, None),
     ):
         d = evaluate(img, f)
-        assert d.kept is False
+        assert d.kept is True
+        assert d.warning is True
         assert "unreadable" in d.reason.lower()
 
 
-def test_device_model_exif_unreadable(tmp_path: Path) -> None:
+def test_device_model_exif_unreadable_fails_open(tmp_path: Path) -> None:
     img = tmp_path / "photo.jpg"
     img.write_bytes(b"fake")
     f = Filters(device_models=["iPhone 15 Pro"])
@@ -183,8 +184,40 @@ def test_device_model_exif_unreadable(tmp_path: Path) -> None:
         side_effect=_make_exif_mock("Apple", None),
     ):
         d = evaluate(img, f)
-        assert d.kept is False
+        assert d.kept is True
+        assert d.warning is True
         assert "unreadable" in d.reason.lower()
+
+
+def test_real_heic_exif_read(tmp_path: Path) -> None:
+    """Real HEIC bytes (written via pillow-heif) must be readable — this is
+    the format nearly every iPhone photo arrives in."""
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).parent.parent / "fixtures"))
+    from fake_icloudpd import _write_minimal_heic
+
+    img = tmp_path / "photo.heic"
+    _write_minimal_heic(str(img), "Apple", "iPhone 15 Pro")
+    # Sanity: the file must actually be HEIC, not a renamed JPEG.
+    assert img.read_bytes()[4:12] in (b"ftypheic", b"ftypmif1")
+
+    kept = evaluate(img, Filters(device_makes=["Apple"]))
+    assert kept.kept is True
+    assert kept.warning is False
+
+    dropped = evaluate(img, Filters(device_makes=["Samsung"]))
+    assert dropped.kept is False
+
+
+def test_unsupported_raw_fails_open(tmp_path: Path) -> None:
+    """A RAW file Pillow can't open (no plugin) must be KEPT with a warning,
+    never deleted."""
+    raw = tmp_path / "photo.dng"
+    raw.write_bytes(b"\x00" * 64)  # not a valid image in any format
+    d = evaluate(raw, Filters(device_makes=["Apple"]))
+    assert d.kept is True
+    assert d.warning is True
 
 
 # ---------------------------------------------------------------------------
