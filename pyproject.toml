@@ -1,6 +1,6 @@
 [project]
 name = "icloudpd-web"
-version = "2026.4.20.post1"
+version = "2026.7.23"
 description = "Web UI for icloud-photos-downloader"
 requires-python = ">=3.12"
 readme = "README.md"
@@ -17,6 +17,8 @@ dependencies = [
   "itsdangerous>=2.2",
   "tomli-w>=1.0",
   "pillow-heif>=0.16",
+  "requests>=2.32.4",
+  "urllib3>=2.5.0",
 ]
 
 [project.optional-dependencies]
