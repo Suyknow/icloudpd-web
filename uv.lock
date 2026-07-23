@@ -306,18 +306,18 @@ wheels = [
 
 [[package]]
 name = "icloudpd"
-version = "1.32.2"
+version = "1.32.3"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/34/4c/253335d8158b6ea2ca730a43c137420f9ea11a73d9797d15b73ccec764e1/icloudpd-1.32.2-py2.py3-none-macosx_13_0_x86_64.macosx_13_0_arm64.whl", hash = "sha256:42bfdc387bc89693872d93d5b97d67519797b014800546c35cf843117d6071b5", size = 28074596, upload-time = "2025-09-02T01:21:03.011Z" },
-    { url = "https://files.pythonhosted.org/packages/3d/84/dddb736109171df9db22617d87e10c8e16c350074f13b822a68264143ca6/icloudpd-1.32.2-py2.py3-none-manylinux1_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:c741a98ec8e16b9b823df6a250b6af237aa9e173d6ec6f57a5344a69e3a8dec4", size = 68189127, upload-time = "2025-09-02T01:21:06.096Z" },
-    { url = "https://files.pythonhosted.org/packages/c2/b3/8fbdff61eb8eec5ba47072caa0d95ddcc30e6c148470102346ea7f32ccdc/icloudpd-1.32.2-py2.py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:b7cef1dc71549c64b8f9b4c9590d73c8ec2943aba88c2b334a5a888c977262a4", size = 66254676, upload-time = "2025-09-02T01:21:09.443Z" },
-    { url = "https://files.pythonhosted.org/packages/7b/b9/cec9beb34e6f88510fde880703598138061f94a26e2ba7d48bbcd7852090/icloudpd-1.32.2-py2.py3-none-manylinux2014_armv7l.manylinux_2_17_armv7l.whl", hash = "sha256:37c6ce5460b7b4a1dfacfe34178f7002a96b66ae7b386a4aa8726baa43c67c75", size = 61994930, upload-time = "2025-09-02T01:21:13.87Z" },
-    { url = "https://files.pythonhosted.org/packages/02/23/4434ad1ae054127c10abfb50b7ac71504512a7216e7b1b59609a88470e0d/icloudpd-1.32.2-py2.py3-none-musllinux_1_2_aarch64.whl", hash = "sha256:34e9f2cdd10c5623a70a3cae43811d260b6597d608272cce36e1d0fcd4cca84a", size = 34652491, upload-time = "2025-09-02T01:21:18.719Z" },
-    { url = "https://files.pythonhosted.org/packages/51/f3/9aebd14ee79702b778ab8434e314922b057fe6c94191cc0c3cad70f27268/icloudpd-1.32.2-py2.py3-none-musllinux_1_2_armv7l.whl", hash = "sha256:68294e1c6d43c76d09e9f53bbca045ad52628484fe3fb9dd7829e3f2d474311c", size = 27691764, upload-time = "2025-09-02T01:21:21.61Z" },
-    { url = "https://files.pythonhosted.org/packages/7a/fa/785f3471a9ec919d874c809254916a14c9af28ce885ae11e151ee2355217/icloudpd-1.32.2-py2.py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:da1af847beb6c5ff52d4d71a39749aeb3cfc3466eb94ccf933970ebe44b54fa7", size = 35454374, upload-time = "2025-09-02T01:21:24.242Z" },
-    { url = "https://files.pythonhosted.org/packages/e2/60/7bc67a3504c0f53b3a81bb158153158600b183533f28387fba7137b94cf4/icloudpd-1.32.2-py2.py3-none-win_amd64.whl", hash = "sha256:3f179ebedccd0eee696a3b6a6cdb0d032ad530dddc68aed2b70c415e576e45a1", size = 27705757, upload-time = "2025-09-02T01:21:26.672Z" },
-    { url = "https://files.pythonhosted.org/packages/4d/06/3fed66a7ee0c9e84c0a7cf1c731931d188e74314fadafb3775b6ac4419ab/icloudpd-1.32.2-py3-none-any.whl", hash = "sha256:14df1380cd8fa6bbfe083079651a51809c5a57beb9986b307e8ddba53f16671a", size = 78664, upload-time = "2025-09-02T01:21:28.828Z" },
+    { url = "https://files.pythonhosted.org/packages/aa/48/465afc4c71184bb0f492c41a527d1960df8259a5a1bf54458c019a7533f6/icloudpd-1.32.3-py2.py3-none-macosx_13_0_x86_64.macosx_13_0_arm64.whl", hash = "sha256:71910ada102bb7f935305266acaeaa46ee8dff4a87604d070d10134a7a9e54cc", size = 25874834, upload-time = "2026-05-30T20:55:07.135Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/01/924dc27d1b864ab209e893f37ba1390f082fd062259cf8d9ad88a0ff0261/icloudpd-1.32.3-py2.py3-none-manylinux1_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:02ffe35d4efbc0254c5a080a13e911f85488dcc51261c43e9b84b46b969e9729", size = 68619490, upload-time = "2026-05-30T20:55:10.137Z" },
+    { url = "https://files.pythonhosted.org/packages/1a/3e/dddbc2f20b6b71875857de07e2a4568253e8832514240a25033137b96abc/icloudpd-1.32.3-py2.py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:b13fa6fd2f629cef3b0aad90fabb0610a1d04f8910640e392b6f1d1a44ccdcbf", size = 67225787, upload-time = "2026-05-30T20:55:13.404Z" },
+    { url = "https://files.pythonhosted.org/packages/fd/8f/caae7cf73a644893554188ea4d2bb6f0e8367ea44fedc1b59d67147e52bc/icloudpd-1.32.3-py2.py3-none-manylinux2014_armv7l.manylinux_2_17_armv7l.whl", hash = "sha256:61328fdbf36850b5054876f2cbcf4fbc9e77b65ea880bae1f40ab8109d194748", size = 63428003, upload-time = "2026-05-30T20:55:16.718Z" },
+    { url = "https://files.pythonhosted.org/packages/f7/ef/b3a19d963fddbe56a27e24e05e0c987068a6b846d3abd1b428641ec65de5/icloudpd-1.32.3-py2.py3-none-musllinux_1_2_aarch64.whl", hash = "sha256:5cbb92fd30e449c854373ce29a9d83e54d1cd72e30d8bcb31640d8ec1ed20629", size = 37271438, upload-time = "2026-05-30T20:55:19.577Z" },
+    { url = "https://files.pythonhosted.org/packages/ee/22/46697aeab771ad4c51b9cc99f4be8b88885b8d19bcb48cfd6e6e9d6d0846/icloudpd-1.32.3-py2.py3-none-musllinux_1_2_armv7l.whl", hash = "sha256:8f2995e9d5f66186a77a2f1d7c72db05379b0e0e8b53b95c568755d8b437ee5d", size = 29581051, upload-time = "2026-05-30T20:55:21.889Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/25/1e6e8d2cf59927a7231041386e2757045a2e0ffb82f8e1c2218d546c7239/icloudpd-1.32.3-py2.py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:310bf0c6ec3af58fd751519cea126982b6ee3924bb533a65121f681786a99ef8", size = 36882007, upload-time = "2026-05-30T20:55:24.328Z" },
+    { url = "https://files.pythonhosted.org/packages/47/a7/aebd827e7cfcdffbfba2ca05f69d55585382bfa562cbcc010080f333e06f/icloudpd-1.32.3-py2.py3-none-win_amd64.whl", hash = "sha256:695cfad0e99d44fb8bca373bc8462e0383805ade4f10624220e1fa4dec2935c9", size = 27838383, upload-time = "2026-05-30T20:55:26.789Z" },
+    { url = "https://files.pythonhosted.org/packages/b9/73/20544e68569fce262d596ebe42730aac235b8e69a36edefebdf8cfa85508/icloudpd-1.32.3-py3-none-any.whl", hash = "sha256:b80b8586ed65e0f90e82b5eb13015c1cf0066ca38f4ee3fcf6378c8688f3fc83", size = 79082, upload-time = "2026-05-30T20:55:28.468Z" },
 ]
 
 [[package]]
@@ -357,7 +357,7 @@ requires-dist = [
     { name = "croniter", specifier = ">=2.0" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
-    { name = "icloudpd", specifier = "==1.32.2" },
+    { name = "icloudpd", specifier = "==1.32.3" },
     { name = "itsdangerous", specifier = ">=2.2" },
     { name = "pillow", specifier = ">=10.0" },
     { name = "pydantic", specifier = ">=2.8" },
