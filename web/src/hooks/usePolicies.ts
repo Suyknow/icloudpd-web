@@ -13,8 +13,15 @@ export function usePolicies() {
 export function useUpsertPolicy() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ name, policy }: { name: string; policy: Policy }) =>
-      policiesApi.upsert(name, policy),
+    mutationFn: ({
+      name,
+      policy,
+      createOnly,
+    }: {
+      name: string;
+      policy: Policy;
+      createOnly?: boolean;
+    }) => policiesApi.upsert(name, policy, { createOnly }),
     onSuccess: (updated: PolicyView) => {
       qc.invalidateQueries({ queryKey: LIST_KEY });
       qc.setQueryData(["policies", updated.name], updated);

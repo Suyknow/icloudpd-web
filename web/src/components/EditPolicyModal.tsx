@@ -7,6 +7,7 @@ import {
   ModalBody,
   ModalCloseButton,
   FormControl,
+  FormErrorMessage,
   Input,
   InputGroup,
   InputRightElement,
@@ -65,14 +66,21 @@ export function EditPolicyModal({
 
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
 
   const update = <K extends keyof FormPolicy>(key: K, value: FormPolicy[K]) =>
     setFormData((prev) => ({ ...prev, [key]: value }));
 
   const handleSave = async () => {
+    setNameError(null);
     try {
       const payload = toBackendPolicy(formData);
-      await upsert.mutateAsync({ name: formData.name, policy: payload });
+      await upsert.mutateAsync({
+        name: formData.name,
+        policy: payload,
+        // Creating (not editing) must never overwrite an existing policy.
+        createOnly: !isEditing,
+      });
       if (password) {
         try {
           await setPolicyPassword.mutateAsync({
@@ -90,7 +98,12 @@ export function EditPolicyModal({
       );
       onClose();
     } catch (err) {
-      if (err instanceof ApiError) pushError(err.message, err.errorId);
+      if (err instanceof ApiError) {
+        if (err.field === "name") {
+          setNameError(err.message);
+        }
+        pushError(err.message, err.errorId);
+      }
     }
   };
 
@@ -127,18 +140,24 @@ export function EditPolicyModal({
                 Basic Settings
               </Text>
               <VStack spacing={4} align="stretch">
-                <FormControl isRequired>
+                <FormControl isRequired isInvalid={nameError !== null}>
                   <FieldWithInfo
                     label="Policy Name"
                     info="Unique identifier used as the policy's primary key in storage. Cannot be changed after creation — delete and recreate if you need a different name."
                   >
                     <Input
                       value={formData.name}
-                      onChange={(e) => update("name", e.target.value)}
+                      onChange={(e) => {
+                        setNameError(null);
+                        update("name", e.target.value);
+                      }}
                       isDisabled={isEditing}
                       maxW="300px"
                     />
                   </FieldWithInfo>
+                  {nameError && (
+                    <FormErrorMessage>{nameError}</FormErrorMessage>
+                  )}
                 </FormControl>
 
                 <FormControl isRequired>

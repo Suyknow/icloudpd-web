@@ -190,6 +190,18 @@ def get_policy(name: str, request: Request) -> dict:
 def put_policy(name: str, body: dict, request: Request) -> dict:
     if body.get("name") != name:
         raise ValidationError("name in URL must match body.name", field="name")
+    # Create-only mode: "If-None-Match: *" (sent by the New Policy modal)
+    # rejects the write when the name is taken instead of upserting over it.
+    if (
+        request.headers.get("if-none-match") == "*"
+        and request.app.state.policy_store.get(name) is not None
+    ):
+        raise ApiError(
+            f"A policy named {name!r} already exists. Choose a different "
+            "name, or edit the existing policy instead.",
+            status_code=409,
+            field="name",
+        )
     # Resolve redaction placeholders back to the stored secrets so an edit
     # round-trip (GET → modify → PUT) keeps SMTP credentials intact.
     incoming = body.get("icloudpd")

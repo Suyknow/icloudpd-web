@@ -310,3 +310,27 @@ def test_export_omits_smtp_secrets_by_default(app_factory: Callable[..., FastAPI
         with_secrets = client.get("/policies/export?include_secrets=true").text
         assert "hunter2" in with_secrets
         assert "mailer@example.com" in with_secrets
+
+
+def test_put_create_only_rejects_duplicate(client: TestClient) -> None:
+    """PUT with If-None-Match:* (New Policy modal) must 409 on an existing
+    name instead of silently overwriting it."""
+    client.put("/policies/a", json=_policy_body())
+    changed = _policy_body()
+    changed["directory"] = "/tmp/other"
+    r = client.put("/policies/a", json=changed, headers={"If-None-Match": "*"})
+    assert r.status_code == 409
+    assert r.json()["field"] == "name"
+    # The original policy is untouched.
+    assert client.get("/policies/a").json()["directory"] == "/tmp/a"
+    # Create-only works when the name is free.
+    r2 = client.put(
+        "/policies/b",
+        json=_policy_body("b") | {"directory": "/tmp/b"},
+        headers={"If-None-Match": "*"},
+    )
+    assert r2.status_code == 200
+    # Plain PUT (edit) still updates.
+    r3 = client.put("/policies/a", json=changed)
+    assert r3.status_code == 200
+    assert client.get("/policies/a").json()["directory"] == "/tmp/other"
