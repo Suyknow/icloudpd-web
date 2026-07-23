@@ -125,6 +125,12 @@ async def test_mfa_flow_awaiting_mfa_status_event(
     )
 
     assert "awaiting_mfa" in status_events, f"Expected awaiting_mfa in {status_events}"
+    # After the code is written to stdin the run must transition back to
+    # "running" (so the UI can close the modal), then end with success.
+    i = status_events.index("awaiting_mfa")
+    assert status_events[i + 1 :] == ["running", "success"], (
+        f"Expected awaiting_mfa → running → success, got {status_events}"
+    )
     assert run.status == "success"
 
 

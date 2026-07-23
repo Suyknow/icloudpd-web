@@ -320,6 +320,11 @@ class Run:
                     if code and self._proc and self._proc.stdin:
                         self._proc.stdin.write((code + "\n").encode("utf-8"))
                         await self._proc.stdin.drain()
+                        # The code is with icloudpd now — leave awaiting_mfa
+                        # so the UI can close the modal and show the run as
+                        # running again instead of "awaiting 2FA" until the
+                        # terminal event.
+                        self._publish("status", {"status": "running"})
                     return
                 if deadline is not None and time.monotonic() >= deadline:
                     self.failure_reason = "mfa_timeout"

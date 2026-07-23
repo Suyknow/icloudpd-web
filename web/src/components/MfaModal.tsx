@@ -23,9 +23,6 @@ interface MFAModalProps {
   onClose: () => void;
   onCancel: () => Promise<void> | void;
   policyName: string;
-  /** True if the current awaiting_mfa is a re-prompt after a previous code
-   * was delivered (indicating Apple rejected it). */
-  rejectedPrevious: boolean;
 }
 
 export function MFAModal({
@@ -33,7 +30,6 @@ export function MFAModal({
   onClose,
   onCancel,
   policyName,
-  rejectedPrevious,
 }: MFAModalProps) {
   const [code, setCode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -116,11 +112,6 @@ export function MFAModal({
                 No code can also mean an outdated icloudpd-web — Apple
                 changes its sign-in flow occasionally, so make sure you are
                 on the latest version. Click Cancel to abort this run.
-              </Text>
-            )}
-            {rejectedPrevious && !hasSubmitted && (
-              <Text fontSize="sm" color="red.600" fontWeight="semibold">
-                The previous code was rejected. Enter a new one.
               </Text>
             )}
             <FormControl>

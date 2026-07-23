@@ -96,19 +96,6 @@ export const PolicyRow = ({ policy }: PolicyRowProps) => {
     }
   }, [policyRowState, isMfaOpen, onMfaOpen, onMfaClose]);
 
-  // Track whether the current awaiting_mfa is a re-prompt after a previously
-  // submitted code. If we ever leave awaiting_mfa and come back, it means
-  // icloudpd rejected the first code.
-  const [mfaPromptCount, setMfaPromptCount] = useState(0);
-  const wasAwaitingRef = React.useRef(false);
-  useEffect(() => {
-    const isAwaiting = policyRowState === "awaiting_mfa";
-    if (isAwaiting && !wasAwaitingRef.current) {
-      setMfaPromptCount((c) => c + 1);
-    }
-    wasAwaitingRef.current = isAwaiting;
-  }, [policyRowState]);
-
   // Distinct failure explanations (live event wins over persisted last_run).
   const failureReason =
     runState?.failureReason ?? policy.last_run?.failure_reason ?? null;
@@ -404,7 +391,6 @@ export const PolicyRow = ({ policy }: PolicyRowProps) => {
         policy={policy}
         onInterruptConfirmed={handleInterruptConfirmed}
         onMfaCancel={handleInterruptConfirmed}
-        mfaRejectedPrevious={mfaPromptCount > 1}
         dialogs={{
           delete: { isOpen: isDeleteOpen, onClose: onDeleteClose },
           interrupt: { isOpen: isInterruptOpen, onClose: onInterruptClose },
