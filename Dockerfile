@@ -2,9 +2,9 @@ FROM python:3.12.8-slim
 
 ARG VERSION
 
-# curl is used by HEALTHCHECK.
+# curl is used by HEALTHCHECK; gosu drops root -> appuser in the entrypoint.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl \
+ && apt-get install -y --no-install-recommends curl gosu \
  && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir "icloudpd-web==${VERSION}"
@@ -16,11 +16,12 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 # Non-root user. Data lives under /data (mounted volume); downloads under
 # /downloads (user-mounted). Both directories are pre-created and chown'd
 # so a simple `-v host:/data` works without host-side `chown` gymnastics.
+# The container starts as root: the entrypoint remaps appuser to PUID/PGID,
+# chowns the mount points, then drops privileges via gosu.
 RUN useradd -m -u 1000 appuser \
  && mkdir -p /data /downloads \
  && chown -R appuser:appuser /data /downloads
 
-USER appuser
 WORKDIR /home/appuser
 
 # Declare volumes so users see them in `docker inspect` and orchestrators

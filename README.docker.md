@@ -21,6 +21,13 @@ The server starts passwordless unless `PASSWORD_HASH` is set (see below).
 
 ## Environment Variables
 
+- `PUID` / `PGID`: user and group ID the app runs as (default: `1000`/`1000`).
+  Set these to the owner of your bind-mounted host directories (run `id` on
+  the host to find them) so the app can write policies and photos — typically
+  needed on Synology and other NAS setups. The container starts as root,
+  chowns `/data` (recursively) and `/downloads` (top level only) to
+  `PUID:PGID`, then drops privileges. If you change `PUID` over an existing
+  download tree, run a one-time `chown -R` on the host.
 - `HOST`: host to bind to (default: `0.0.0.0`)
 - `PORT`: port to bind to (default: `5000`)
 - `DATA_DIR`: path for persistent state inside the container (default: `/data`)
