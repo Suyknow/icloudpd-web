@@ -139,3 +139,20 @@ async def test_run_forever_stops_on_stop() -> None:
     await asyncio.sleep(0)
     s.stop()
     await asyncio.wait_for(task, timeout=5)
+
+
+def test_skip_overlap_logs_reason_once_per_minute(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A cron-matching minute skipped due to an active run logs a warning —
+    once, not once per tick-second."""
+    store = FakeStore([_p("a", "* * * * *")])
+    runner = FakeRunner()
+    runner.running.add("a")
+    s = Scheduler(store=store, runner=runner, password_lookup=_passwords)
+    with caplog.at_level("WARNING", logger="icloudpd_web.scheduler.scheduler"):
+        s.tick(datetime(2026, 1, 1, 12, 30, 15))
+        s.tick(datetime(2026, 1, 1, 12, 30, 45))
+    skips = [r for r in caplog.records if "skipping policy" in r.message]
+    assert len(skips) == 1
+    assert "a" in skips[0].getMessage()

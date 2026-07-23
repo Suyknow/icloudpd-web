@@ -39,6 +39,9 @@ class Scheduler:
         self._runner = runner
         self._password_lookup = password_lookup
         self._last_fired: dict[str, datetime] = {}
+        # Cron minutes we already logged a "skipped: still running" warning
+        # for, so a matching minute logs once, not once per tick-second.
+        self._skip_logged: dict[str, datetime] = {}
         self._stop = asyncio.Event()
         self._pending: list[Policy] = []
 
@@ -49,13 +52,23 @@ class Scheduler:
         for p in self._store.all():
             if not p.enabled:
                 continue
-            if self._runner.is_running(p.name):
-                continue
             local_now = self._localize(now, p)
             minute = local_now.replace(second=0, microsecond=0)
             if not croniter.match(p.cron, minute):
                 continue
             if self._last_fired.get(p.name) == minute:
+                continue
+            if self._runner.is_running(p.name):
+                # A prior run still holds the slot (possibly stuck awaiting
+                # 2FA). Log the skip so unattended stalls are visible.
+                if self._skip_logged.get(p.name) != minute:
+                    self._skip_logged[p.name] = minute
+                    log.warning(
+                        "scheduler: skipping policy %s at %s — previous run "
+                        "still active (it may be waiting for a 2FA code)",
+                        p.name,
+                        minute.isoformat(),
+                    )
                 continue
             self._last_fired[p.name] = minute
             self._pending.append(p)

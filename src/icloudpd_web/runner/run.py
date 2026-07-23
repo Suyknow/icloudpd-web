@@ -56,6 +56,9 @@ class Run:
         # For the folder-structure sentinel written on first success.
         target_directory: Path | None = None,
         folder_structure_pattern: str | None = None,
+        # How long to wait for a 2FA code before failing the run. None
+        # disables the timeout (used by some tests).
+        mfa_timeout: float | None = 600.0,
     ) -> None:
         self.run_id = run_id
         self.policy_name = policy_name
@@ -67,6 +70,7 @@ class Run:
         self._dry_run = dry_run
         self._target_directory = target_directory
         self._folder_structure_pattern = folder_structure_pattern
+        self._mfa_timeout = mfa_timeout
         self.log_dir = log_dir
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = self.log_dir / f"{run_id}.log"
@@ -76,6 +80,9 @@ class Run:
         self.status: RunStatus = "pending"
         self.exit_code: int | None = None
         self.error_id: str | None = None
+        # Machine-readable cause for a failed run (e.g. "mfa_timeout");
+        # None for ordinary failures.
+        self.failure_reason: str | None = None
         self.progress: dict[str, Any] = {"downloaded": 0, "total": None}
 
         self._proc: asyncio.subprocess.Process | None = None
@@ -238,7 +245,13 @@ class Run:
         self._mfa_poll_task = asyncio.create_task(self._poll_mfa_slot(slot_path))
 
     async def _poll_mfa_slot(self, slot_path: Path) -> None:
-        """Poll the slot file every 100ms. When it appears, write its content to stdin."""
+        """Poll the slot file every 100ms. When it appears, write its content to stdin.
+
+        Gives up after the configured MFA timeout: an unattended run (e.g. a
+        3am scheduled fire with an expired session) would otherwise hold the
+        policy's active slot forever.
+        """
+        deadline = time.monotonic() + self._mfa_timeout if self._mfa_timeout is not None else None
         try:
             while True:
                 if slot_path.exists():  # noqa: ASYNC240
@@ -246,6 +259,14 @@ class Run:
                     if code and self._proc and self._proc.stdin:
                         self._proc.stdin.write((code + "\n").encode("utf-8"))
                         await self._proc.stdin.drain()
+                    return
+                if deadline is not None and time.monotonic() >= deadline:
+                    self.failure_reason = "mfa_timeout"
+                    self._emit_log(
+                        f"ERROR    2FA code not provided within "
+                        f"{int(self._mfa_timeout or 0)}s; stopping run"
+                    )
+                    await self.stop()
                     return
                 await asyncio.sleep(0.1)
         except asyncio.CancelledError:
@@ -268,8 +289,13 @@ class Run:
                 await self._mfa_poll_task
         self.exit_code = code
         self.ended_at = datetime.now(UTC)
-        if self._stopping and code != 0:
-            final_status: RunStatus = "stopped"
+        if self.failure_reason == "mfa_timeout":
+            # Timed-out MFA terminates via stop(), but it is a failure, not
+            # a user-requested stop — keep the distinct terminal status.
+            final_status: RunStatus = "failed"
+            self.error_id = self.run_id
+        elif self._stopping and code != 0:
+            final_status = "stopped"
         elif code == 0:
             final_status = "success"
         else:
@@ -303,7 +329,12 @@ class Run:
         self.status = final_status
         self._publish(
             "status",
-            {"status": self.status, "exit_code": code, "error_id": self.error_id},
+            {
+                "status": self.status,
+                "exit_code": code,
+                "error_id": self.error_id,
+                "failure_reason": self.failure_reason,
+            },
         )
         if self._log_fh is not None:
             self._log_fh.close()
@@ -323,6 +354,7 @@ class Run:
             "ended_at": self.ended_at,
             "exit_code": self.exit_code,
             "error_id": self.error_id,
+            "failure_reason": self.failure_reason,
             "downloaded": self.progress.get("downloaded"),
             "total": self.progress.get("total"),
         }

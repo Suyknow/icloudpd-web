@@ -79,6 +79,16 @@ def create_app(
         if event == "started":
             notifier.emit("start", policy_name=run.policy_name, summary=_summarize(run))
             return
+        if event == "mfa_required":
+            notifier.emit(
+                "mfa_required",
+                policy_name=run.policy_name,
+                summary=(
+                    "Run is waiting for a 2FA code — open icloudpd-web and "
+                    "enter the code before the MFA timeout expires."
+                ),
+            )
+            return
         if event != "completed":
             return
         summary = _summarize(run)
@@ -99,6 +109,7 @@ def create_app(
         # Persist Apple session cookies under data_dir so 2FA survives
         # restarts/container recreates (policies can still override).
         default_cookie_directory=data_dir / "cookies",
+        mfa_timeout=settings.mfa_timeout_seconds,
     )
 
     scheduler = Scheduler(

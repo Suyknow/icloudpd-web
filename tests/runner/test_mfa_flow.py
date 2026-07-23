@@ -225,3 +225,39 @@ async def test_mfa_flow_stop_during_awaiting_mfa(
     assert run.status == "stopped"
     # Slot file must NOT have been written — user cancelled instead of submitting.
     assert not slot_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_mfa_flow_times_out_without_code(
+    tmp_path: Path,
+    fake_icloudpd_cmd: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If no 2FA code arrives within mfa_timeout, the run must fail with a
+    distinct failure_reason instead of holding the policy slot forever."""
+    monkeypatch.setenv("FAKE_ICLOUDPD_MODE", "mfa")
+    monkeypatch.setenv("FAKE_ICLOUDPD_TOTAL", "1")
+
+    slot_path = tmp_path / "p.code"
+
+    run = Run(
+        run_id="test-mfa-timeout",
+        policy_name="p",
+        argv=_argv(fake_icloudpd_cmd),
+        log_dir=tmp_path,
+        password="pw",
+        on_mfa_needed=lambda _name: slot_path,
+        mfa_timeout=0.3,
+    )
+    await run.start()
+    await asyncio.wait_for(run.wait(), timeout=10)
+
+    assert run.status == "failed"
+    assert run.failure_reason == "mfa_timeout"
+    log_text = run.log_path.read_text()
+    assert "2FA code not provided within" in log_text
+    # Sidecar must carry the reason for the UI/history.
+    import json
+
+    meta = json.loads(run.log_path.with_suffix(".meta.json").read_text())
+    assert meta["failure_reason"] == "mfa_timeout"

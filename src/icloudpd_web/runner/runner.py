@@ -29,11 +29,13 @@ class Runner:
         on_run_event: Callable[[Run, str], None] | None = None,
         mfa_registry: MfaRegistry | None = None,
         default_cookie_directory: Path | None = None,
+        mfa_timeout: float | None = 600.0,
     ) -> None:
         self._runs_base = runs_base
         self._argv_fn = icloudpd_argv
         self._retention = retention
         self._default_cookie_directory = default_cookie_directory
+        self._mfa_timeout = mfa_timeout
         self._on_event = on_run_event or (lambda r, ev: None)
         self._mfa_registry = mfa_registry
         self._active: dict[str, Run] = {}
@@ -97,7 +99,10 @@ class Runner:
                 reg = self._mfa_registry
 
                 def on_mfa_needed(pname: str) -> Path:  # noqa: E306
-                    return reg.register(pname).path
+                    path = reg.register(pname).path
+                    # `run` is bound below, before the subprocess can prompt.
+                    self._on_event(run, "mfa_required")
+                    return path
 
             run = Run(
                 run_id=run_id,
@@ -110,6 +115,7 @@ class Runner:
                 dry_run=bool(policy.icloudpd.get("dry_run", False)),
                 target_directory=policy.directory,
                 folder_structure_pattern=policy.icloudpd.get("folder_structure"),
+                mfa_timeout=self._mfa_timeout,
             )
             self._active[policy.name] = run
             self._by_id[run_id] = run
@@ -212,7 +218,9 @@ class Runner:
                 reg = self._mfa_registry
 
                 def on_mfa_needed(pname: str) -> Path:  # noqa: E306
-                    return reg.register(pname).path
+                    path = reg.register(pname).path
+                    self._on_event(run, "mfa_required")
+                    return path
 
             run = Run(
                 run_id=run_id,
@@ -222,6 +230,7 @@ class Runner:
                 password=password,
                 on_mfa_needed=on_mfa_needed,
                 filters=None,
+                mfa_timeout=self._mfa_timeout,
             )
             self._active[policy.name] = run
             self._by_id[run_id] = run
