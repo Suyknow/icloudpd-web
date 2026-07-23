@@ -156,3 +156,46 @@ def test_skip_overlap_logs_reason_once_per_minute(
     skips = [r for r in caplog.records if "skipping policy" in r.message]
     assert len(skips) == 1
     assert "a" in skips[0].getMessage()
+
+
+async def test_drain_pending_reports_start_failure() -> None:
+    """A failed scheduled start must invoke the on_start_failure hook with
+    the reason (so app.py can notify), not just server-log it."""
+
+    class FailingRunner(FakeRunner):
+        async def start(
+            self, policy: Policy, *, password: str | None = None, trigger: str
+        ) -> object:
+            raise ValueError("password is required to start policy 'a'")
+
+    reported: list[tuple[str, str]] = []
+    s = Scheduler(
+        store=FakeStore([]),
+        runner=FailingRunner(),
+        password_lookup=_passwords,
+        on_start_failure=lambda name, reason: reported.append((name, reason)),
+    )
+    s._pending = [_p("a", "* * * * *")]
+    await s._drain_pending()
+    assert reported == [("a", "password is required to start policy 'a'")]
+
+
+async def test_drain_pending_survives_failing_hook() -> None:
+    class FailingRunner(FakeRunner):
+        async def start(
+            self, policy: Policy, *, password: str | None = None, trigger: str
+        ) -> object:
+            raise RuntimeError("boom")
+
+    def bad_hook(name: str, reason: str) -> None:
+        raise RuntimeError("hook broke too")
+
+    s = Scheduler(
+        store=FakeStore([]),
+        runner=FailingRunner(),
+        password_lookup=_passwords,
+        on_start_failure=bad_hook,
+    )
+    s._pending = [_p("a", "* * * * *")]
+    await s._drain_pending()  # must not raise
+    assert s._pending == []

@@ -106,7 +106,9 @@ export const PolicyRow = ({ policy }: PolicyRowProps) => {
         ? "timed out waiting for a 2FA code"
         : failureReason === "mfa_2sa_unsupported"
           ? "legacy two-step auth (2sa) is not supported"
-          : "failed";
+          : failureReason === "bad_password"
+            ? "wrong iCloud password — update it in the policy"
+            : "failed";
 
   // Derive raw counters for the status text. The progress bar itself is
   // indeterminate while running, so we no longer compute a percentage.

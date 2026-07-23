@@ -31,6 +31,9 @@ MFA_PROMPT_2FA_RE = re.compile(r"Two-factor authentication is required \(2fa\)")
 MFA_PROMPT_2SA_RE = re.compile(r"Two-step authentication is required \(2sa\)")
 # Real 1.32.3 logs this and exits 1 on a rejected code (no console re-prompt).
 MFA_REJECTED_RE = re.compile(r"Failed to verify two-factor authentication code")
+# Wrong stored iCloud password: every retry risks an Apple lockout, so this
+# must surface as a distinct failure instead of a generic "exit 1".
+BAD_PASSWORD_RE = re.compile(r"Invalid email/password combination")
 _TS_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\s")
 # Match icloudpd's "Downloaded <path>" line anywhere on the line — real
 # output is timestamp-prefixed ("2026-04-20 11:17:10 INFO     Downloaded ...").
@@ -178,6 +181,8 @@ class Run:
             text = line.decode("utf-8", errors="replace").rstrip("\n")
             self._emit_log(text)
             self._maybe_progress(text)
+            if BAD_PASSWORD_RE.search(text):
+                self.failure_reason = "bad_password"
             if kind == "stdout":
                 self._maybe_collect_downloaded(text)
                 if MFA_REJECTED_RE.search(text):

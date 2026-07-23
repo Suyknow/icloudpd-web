@@ -34,10 +34,16 @@ class Scheduler:
         store: _StoreProto,
         runner: _RunnerProto,
         password_lookup: Callable[[str], str | None],
+        on_start_failure: Callable[[str, str], None] | None = None,
     ) -> None:
         self._store = store
         self._runner = runner
         self._password_lookup = password_lookup
+        # Called with (policy_name, reason) when a scheduled run fails to
+        # start — e.g. missing password or folder-structure drift. Without
+        # it those failures were server-log-only: no Run object, no
+        # notification, last_run unchanged.
+        self._on_start_failure = on_start_failure
         self._last_fired: dict[str, datetime] = {}
         # Cron minutes we already logged a "skipped: still running" warning
         # for, so a matching minute logs once, not once per tick-second.
@@ -94,8 +100,13 @@ class Scheduler:
                     password=self._password_lookup(p.name),
                     trigger="cron",
                 )
-            except Exception:
+            except Exception as exc:
                 log.exception("failed to start scheduled policy %s", p.name)
+                if self._on_start_failure is not None:
+                    try:
+                        self._on_start_failure(p.name, str(exc))
+                    except Exception:
+                        log.exception("on_start_failure hook failed for %s", p.name)
 
     @staticmethod
     def _localize(now: datetime, policy: Policy) -> datetime:

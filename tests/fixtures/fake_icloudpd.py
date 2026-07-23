@@ -17,7 +17,7 @@ Faithful to the real icloudpd 1.32.3 console flow:
 
 Behavior driven by env vars:
   FAKE_ICLOUDPD_MODE: one of 'success', 'fail', 'slow', 'mfa', 'mfa_reject',
-    'mfa_2sa', 'filter_demo'
+    'mfa_2sa', 'bad_password', 'filter_demo'
   FAKE_ICLOUDPD_TOTAL: default 5
   FAKE_ICLOUDPD_SLEEP: seconds between progress lines (default 0.01)
   FAKE_ICLOUDPD_DIR: target directory for filter_demo mode
@@ -149,6 +149,11 @@ def main() -> int:  # noqa: C901, PLR0911, PLR0912
             if not line:  # stdin closed; parent killed us or gave up
                 return 1
             print("Please choose an option: [0]: ", flush=True)
+
+    if mode == "bad_password":
+        # Real icloudpd logs this and exits 1 when Apple rejects the password.
+        print("ERROR    Invalid email/password combination.", flush=True)
+        return 1
 
     if mode == "fail":
         print("ERROR    something went wrong", file=sys.stderr, flush=True)
