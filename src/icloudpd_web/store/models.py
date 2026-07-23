@@ -57,6 +57,8 @@ class RunSummary(BaseModel):
     status: Literal["running", "success", "failed", "stopped"]
     exit_code: int | None = None
     error_id: str | None = None
+    # Machine-readable failure cause (e.g. "mfa_rejected", "mfa_timeout").
+    failure_reason: str | None = None
 
 
 class Policy(BaseModel):

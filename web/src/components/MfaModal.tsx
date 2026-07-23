@@ -41,6 +41,10 @@ export function MFAModal({
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [error, setError] = useState<string | undefined>();
 
+  // Apple 2FA codes are exactly six digits; icloudpd exits on a bad code,
+  // so reject malformed input client-side instead of burning the attempt.
+  const isValidCode = /^\d{6}$/.test(code);
+
   // Reset transient state each time the modal is re-opened for a new prompt.
   useEffect(() => {
     if (isOpen) {
@@ -51,6 +55,10 @@ export function MFAModal({
   }, [isOpen]);
 
   const handleSubmit = async () => {
+    if (!isValidCode) {
+      setError("Enter the 6-digit verification code (digits only).");
+      return;
+    }
     setIsSubmitting(true);
     setError(undefined);
     try {
@@ -95,8 +103,9 @@ export function MFAModal({
             {hasSubmitted ? (
               <Text fontSize="sm" color="gray.600">
                 Code submitted — waiting for icloudpd to verify with Apple.
-                This modal will close automatically on success. If Apple
-                rejects the code, we&apos;ll prompt you again.
+                This modal will close automatically once verification
+                finishes. If Apple rejects the code, the run stops — start
+                it again to retry with a fresh code.
               </Text>
             ) : (
               <Text fontSize="sm" color="gray.600">
@@ -128,10 +137,14 @@ export function MFAModal({
               </FormLabel>
               <Input
                 type="text"
+                inputMode="numeric"
+                maxLength={6}
                 value={code}
-                onChange={(e) => setCode(e.target.value)}
+                onChange={(e) =>
+                  setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                }
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && code) {
+                  if (e.key === "Enter" && isValidCode) {
                     handleSubmit();
                   }
                 }}
@@ -159,7 +172,9 @@ export function MFAModal({
           <Button
             colorScheme="blue"
             onClick={handleSubmit}
-            isDisabled={!code || isSubmitting || isCancelling || hasSubmitted}
+            isDisabled={
+              !isValidCode || isSubmitting || isCancelling || hasSubmitted
+            }
             isLoading={isSubmitting}
           >
             Submit

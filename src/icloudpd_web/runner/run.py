@@ -25,10 +25,12 @@ PROGRESS_RE = re.compile(r"Downloading\s+(\d+)\s+of\s+(\d+)", re.IGNORECASE)
 # ("...the two-factor authentication expires.") and the rejection error
 # ("Failed to verify two-factor authentication code"), re-opening the modal
 # after every successful interactive 2FA.
-MFA_PROMPT_RE = re.compile(
-    r"Two-factor authentication is required \(2fa\)"
-    r"|Two-step authentication is required \(2sa\)"
-)
+MFA_PROMPT_2FA_RE = re.compile(r"Two-factor authentication is required \(2fa\)")
+# Legacy two-step auth prompts for a trusted-device INDEX and loops on
+# input(); a single 6-digit code can never answer it, so it is unsupported.
+MFA_PROMPT_2SA_RE = re.compile(r"Two-step authentication is required \(2sa\)")
+# Real 1.32.3 logs this and exits 1 on a rejected code (no console re-prompt).
+MFA_REJECTED_RE = re.compile(r"Failed to verify two-factor authentication code")
 _TS_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\s")
 # Match icloudpd's "Downloaded <path>" line anywhere on the line — real
 # output is timestamp-prefixed ("2026-04-20 11:17:10 INFO     Downloaded ...").
@@ -173,7 +175,14 @@ class Run:
             self._maybe_progress(text)
             if kind == "stdout":
                 self._maybe_collect_downloaded(text)
-                if self._on_mfa_needed and MFA_PROMPT_RE.search(text):
+                if MFA_REJECTED_RE.search(text):
+                    # icloudpd exits right after this line; record the cause
+                    # so the terminal status is a distinct mfa_rejected
+                    # failure the UI can explain.
+                    self.failure_reason = "mfa_rejected"
+                elif MFA_PROMPT_2SA_RE.search(text):
+                    self._fail_2sa_unsupported()
+                elif self._on_mfa_needed and MFA_PROMPT_2FA_RE.search(text):
                     self._trigger_mfa()
 
     def _maybe_collect_downloaded(self, text: str) -> None:
@@ -266,13 +275,28 @@ class Run:
         self.progress = {"downloaded": downloaded, "total": total}
         self._publish("progress", dict(self.progress))
 
+    def _fail_2sa_unsupported(self) -> None:
+        """Legacy 2SA is unsupported: stop the run with a clear error.
+
+        icloudpd's 2SA console flow asks for a trusted-device index and loops
+        on input() — the single-code slot flow can never answer it, so showing
+        the code modal would deadlock the run.
+        """
+        self.failure_reason = "mfa_2sa_unsupported"
+        self._emit_log(
+            "ERROR    This account uses legacy two-step authentication (2sa), "
+            "which icloudpd-web does not support. Enable two-factor "
+            "authentication (2fa) on the account and run again."
+        )
+        asyncio.create_task(self.stop())
+
     def _trigger_mfa(self) -> None:
-        """Called when an MFA prompt is detected in stdout.
+        """Called when the 2FA prompt is detected in stdout.
 
         Registers a fresh MFA slot, emits awaiting_mfa, and starts a poll task
-        that writes the delivered code to stdin. Re-entrant: if icloudpd
-        rejects the code and re-prompts, the previous poll task will already
-        have returned, and we trigger again so the UI can re-open the modal.
+        that writes the delivered code to stdin. Real icloudpd 1.32.3 never
+        re-prompts: a rejected code makes it exit 1 (surfaced as an
+        mfa_rejected failure), so at most one prompt fires per run.
         """
         if self._mfa_poll_task is not None and not self._mfa_poll_task.done():
             return  # previous code still being delivered
@@ -326,9 +350,10 @@ class Run:
                 await self._mfa_poll_task
         self.exit_code = code
         self.ended_at = datetime.now(UTC)
-        if self.failure_reason == "mfa_timeout":
-            # Timed-out MFA terminates via stop(), but it is a failure, not
-            # a user-requested stop — keep the distinct terminal status.
+        if self.failure_reason is not None:
+            # MFA timeout / rejection / unsupported 2SA may terminate via
+            # stop(), but they are failures, not user-requested stops —
+            # keep the distinct terminal status.
             final_status: RunStatus = "failed"
             self.error_id = self.run_id
         elif self._stopping and code != 0:

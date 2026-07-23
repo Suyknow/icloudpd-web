@@ -53,6 +53,7 @@ def _load_last_run(policy_name: str, data_dir: Path) -> RunSummary | None:
             status=best["status"],
             exit_code=best.get("exit_code"),
             error_id=best.get("error_id"),
+            failure_reason=best.get("failure_reason"),
         )
     except Exception:
         return None

@@ -109,6 +109,18 @@ export const PolicyRow = ({ policy }: PolicyRowProps) => {
     wasAwaitingRef.current = isAwaiting;
   }, [policyRowState]);
 
+  // Distinct failure explanations (live event wins over persisted last_run).
+  const failureReason =
+    runState?.failureReason ?? policy.last_run?.failure_reason ?? null;
+  const failureText =
+    failureReason === "mfa_rejected"
+      ? "Apple rejected the 2FA code — run again to retry"
+      : failureReason === "mfa_timeout"
+        ? "timed out waiting for a 2FA code"
+        : failureReason === "mfa_2sa_unsupported"
+          ? "legacy two-step auth (2sa) is not supported"
+          : "failed";
+
   // Derive raw counters for the status text. The progress bar itself is
   // indeterminate while running, so we no longer compute a percentage.
   const { downloaded, total } = useMemo(() => {
@@ -333,7 +345,7 @@ export const PolicyRow = ({ policy }: PolicyRowProps) => {
                   : policyRowState === "awaiting_mfa"
                     ? "awaiting 2FA"
                     : policyRowState === "errored"
-                      ? "failed"
+                      ? failureText
                       : policyRowState === "done"
                         ? total > 0
                           ? `done • ${downloaded}/${total}`

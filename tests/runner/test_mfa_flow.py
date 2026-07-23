@@ -251,3 +251,70 @@ async def test_mfa_flow_times_out_without_code(
 
     meta = json.loads(run.log_path.with_suffix(".meta.json").read_text())
     assert meta["failure_reason"] == "mfa_timeout"
+
+
+@pytest.mark.asyncio
+async def test_mfa_flow_rejected_code_sets_failure_reason(
+    tmp_path: Path,
+    fake_icloudpd_cmd: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The rejection line maps to a distinct mfa_rejected failure the UI explains."""
+    monkeypatch.setenv("FAKE_ICLOUDPD_MODE", "mfa_reject")
+
+    slot_path = tmp_path / "p.code"
+
+    run = Run(
+        run_id="test-mfa-reject-reason",
+        policy_name="p",
+        argv=_argv(fake_icloudpd_cmd),
+        log_dir=tmp_path,
+        password="pw",
+        on_mfa_needed=lambda _name: slot_path,
+    )
+    await run.start()
+
+    async def provide_bad_code() -> None:
+        for _ in range(100):
+            await asyncio.sleep(0.05)
+            if run.status == "running" and not slot_path.exists():
+                break
+        slot_path.write_text("111111\n")
+
+    await asyncio.wait_for(asyncio.gather(run.wait(), provide_bad_code()), timeout=15)
+
+    assert run.status == "failed"
+    assert run.failure_reason == "mfa_rejected"
+
+
+@pytest.mark.asyncio
+async def test_mfa_flow_2sa_prompt_is_unsupported(
+    tmp_path: Path,
+    fake_icloudpd_cmd: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The legacy 2sa device-index prompt must stop the run with a clear
+    error instead of opening the code modal (which could never answer it)."""
+    monkeypatch.setenv("FAKE_ICLOUDPD_MODE", "mfa_2sa")
+
+    prompts: list[str] = []
+
+    def on_mfa_needed(policy_name: str) -> Path:
+        prompts.append(policy_name)
+        return tmp_path / "p.code"
+
+    run = Run(
+        run_id="test-mfa-2sa",
+        policy_name="p",
+        argv=_argv(fake_icloudpd_cmd),
+        log_dir=tmp_path,
+        password="pw",
+        on_mfa_needed=on_mfa_needed,
+    )
+    await run.start()
+    await asyncio.wait_for(run.wait(), timeout=15)
+
+    assert prompts == [], "2sa must not open the MFA code modal"
+    assert run.status == "failed"
+    assert run.failure_reason == "mfa_2sa_unsupported"
+    assert "does not support" in run.log_path.read_text()

@@ -44,6 +44,7 @@ export interface RunSummary {
   ended_at?: string | null;
   exit_code?: number | null;
   error_id?: string | null;
+  failure_reason?: string | null;
   downloaded?: number;
   total?: number;
 }
