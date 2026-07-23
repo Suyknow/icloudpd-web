@@ -101,9 +101,12 @@ export function MFAModal({
             ) : (
               <Text fontSize="sm" color="gray.600">
                 Apple should push a 6-digit code to your trusted devices. If
-                you don&apos;t receive one within a minute, Apple may be
-                rate-limiting after repeated attempts — wait and try again, or
-                click Cancel to abort this run.
+                none arrives, you can generate one manually on an iPhone or
+                iPad: turn on Airplane Mode, then open Settings &gt; [your
+                name] &gt; Sign-In &amp; Security and a code popup appears.
+                No code can also mean an outdated icloudpd-web — Apple
+                changes its sign-in flow occasionally, so make sure you are
+                on the latest version. Click Cancel to abort this run.
               </Text>
             )}
             {rejectedPrevious && !hasSubmitted && (
