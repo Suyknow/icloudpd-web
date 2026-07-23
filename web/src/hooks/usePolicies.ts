@@ -7,7 +7,13 @@ import type { Policy, PolicyView } from "@/types/api";
 const LIST_KEY = ["policies"] as const;
 
 export function usePolicies() {
-  return useQuery({ queryKey: LIST_KEY, queryFn: policiesApi.list });
+  return useQuery({
+    queryKey: LIST_KEY,
+    queryFn: policiesApi.list,
+    // Slow polling fallback: if SSE dies silently, stale "running" rows
+    // self-heal within 30s instead of persisting until a manual reload.
+    refetchInterval: 30_000,
+  });
 }
 
 export function useUpsertPolicy() {
