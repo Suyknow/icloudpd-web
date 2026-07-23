@@ -29,7 +29,11 @@ export function App() {
   const logout = useLogout();
   const authenticated = auth?.authenticated ?? false;
   usePoliciesLiveUpdate(authenticated);
-  const { data: policies } = usePolicies();
+  const {
+    data: policies,
+    isLoading: policiesLoading,
+    isError: policiesError,
+  } = usePolicies();
 
   const {
     isOpen: isEditOpen,
@@ -94,7 +98,11 @@ export function App() {
                 </Button>
               }
             >
-              <PolicyList policies={policies ?? []} />
+              <PolicyList
+                policies={policies ?? []}
+                isLoading={policiesLoading}
+                isError={policiesError}
+              />
             </Panel>
           </Box>
         </VStack>

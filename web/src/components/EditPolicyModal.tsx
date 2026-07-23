@@ -89,6 +89,7 @@ export function EditPolicyModal({
           });
         } catch (err) {
           if (err instanceof ApiError) pushError(err.message, err.errorId);
+          else pushError("Failed to store the iCloud password — is the server reachable?");
         }
       }
       pushSuccess(
@@ -103,6 +104,8 @@ export function EditPolicyModal({
           setNameError(err.message);
         }
         pushError(err.message, err.errorId);
+      } else {
+        pushError("Failed to save policy — is the server reachable?");
       }
     }
   };

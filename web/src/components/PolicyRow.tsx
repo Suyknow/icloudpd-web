@@ -152,6 +152,7 @@ export const PolicyRow = ({ policy }: PolicyRowProps) => {
       pushSuccess(`Started policy "${policy.name}"`);
     } catch (err) {
       if (err instanceof ApiError) pushError(err.message, err.errorId);
+      else pushError(`Failed to start "${policy.name}" — is the server reachable?`);
     }
   };
 
@@ -163,6 +164,7 @@ export const PolicyRow = ({ policy }: PolicyRowProps) => {
       pushSuccess(`Stopped "${policy.name}"`);
     } catch (err) {
       if (err instanceof ApiError) pushError(err.message, err.errorId);
+      else pushError(`Failed to stop "${policy.name}" — is the server reachable?`);
     }
   };
 
