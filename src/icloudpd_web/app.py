@@ -96,6 +96,9 @@ def create_app(
         retention=settings.retention_runs,
         on_run_event=_on_run_event,
         mfa_registry=mfa_registry,
+        # Persist Apple session cookies under data_dir so 2FA survives
+        # restarts/container recreates (policies can still override).
+        default_cookie_directory=data_dir / "cookies",
     )
 
     scheduler = Scheduler(

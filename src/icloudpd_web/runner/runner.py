@@ -28,10 +28,12 @@ class Runner:
         retention: int = 10,
         on_run_event: Callable[[Run, str], None] | None = None,
         mfa_registry: MfaRegistry | None = None,
+        default_cookie_directory: Path | None = None,
     ) -> None:
         self._runs_base = runs_base
         self._argv_fn = icloudpd_argv
         self._retention = retention
+        self._default_cookie_directory = default_cookie_directory
         self._on_event = on_run_event or (lambda r, ev: None)
         self._mfa_registry = mfa_registry
         self._active: dict[str, Run] = {}
@@ -84,7 +86,10 @@ class Runner:
             log_dir = self._runs_base / policy.name
             log_dir.mkdir(parents=True, exist_ok=True)
 
-            argv_tail = build_argv(effective_policy)
+            argv_tail = build_argv(
+                effective_policy,
+                default_cookie_directory=self._ensure_cookie_directory(),
+            )
             argv = self._argv_fn(argv_tail)
 
             on_mfa_needed = None
@@ -112,6 +117,17 @@ class Runner:
             asyncio.create_task(self._on_complete(run))
             self._on_event(run, "started")
             return run
+
+    def _ensure_cookie_directory(self) -> Path | None:
+        """Create the default cookie directory (if configured) and return it.
+
+        Persisting icloudpd's session cookies under data_dir means a valid
+        Apple session survives backend restarts and container recreates, so
+        runs don't force a fresh 2FA each time.
+        """
+        if self._default_cookie_directory is not None:
+            self._default_cookie_directory.mkdir(parents=True, exist_ok=True)
+        return self._default_cookie_directory
 
     async def _resolve_library_kind(self, policy: Policy, password: str) -> str | None:
         """Translate policy.library_kind into an icloudpd library identifier.
@@ -184,6 +200,11 @@ class Runner:
                 "console",
                 "--list-libraries",
             ]
+            # Same cookie handling as a download run: policy override wins,
+            # else the persistent default (so discovery reuses the session).
+            cookie_dir = policy.icloudpd.get("cookie_directory") or self._ensure_cookie_directory()
+            if cookie_dir:
+                argv_tail += ["--cookie-directory", str(cookie_dir)]
             argv = self._argv_fn(argv_tail)
 
             on_mfa_needed = None
