@@ -33,6 +33,7 @@ const NEW_BACKEND_EXTRAS = new Set([
   "filter_match_patterns",
   "filter_device_makes",
   "filter_device_models",
+  "filter_exif_fallback",
 ]);
 
 export interface FormPolicy extends OldPolicy {
@@ -53,6 +54,7 @@ export interface FormPolicy extends OldPolicy {
   filter_match_patterns: string[];
   filter_device_makes: string[];
   filter_device_models: string[];
+  filter_exif_fallback: "keep" | "delete";
 }
 
 export function defaultFormPolicy(): FormPolicy {
@@ -108,6 +110,7 @@ export function defaultFormPolicy(): FormPolicy {
     filter_match_patterns: [],
     filter_device_makes: [],
     filter_device_models: [],
+    filter_exif_fallback: "keep",
   };
 }
 
@@ -138,6 +141,7 @@ export function fromPolicyView(view: PolicyView): FormPolicy {
     filter_match_patterns: view.filters?.match_patterns ?? [],
     filter_device_makes: view.filters?.device_makes ?? [],
     filter_device_models: view.filters?.device_models ?? [],
+    filter_exif_fallback: view.filters?.exif_fallback ?? "keep",
   };
 }
 
@@ -178,6 +182,7 @@ export function toBackendPolicy(form: FormPolicy): BackendPolicy {
       match_patterns: form.filter_match_patterns,
       device_makes: form.filter_device_makes,
       device_models: form.filter_device_models,
+      exif_fallback: form.filter_exif_fallback,
     },
   };
 }

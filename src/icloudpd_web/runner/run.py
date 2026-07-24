@@ -109,6 +109,9 @@ class Run:
         self._filter_tasks: list[asyncio.Task[None]] = []
         self._filter_kept = 0
         self._filter_deleted = 0
+        # Parent dirs of files the filter deleted; candidates for empty-dir
+        # pruning once the run is over and no more files will be written.
+        self._filter_deleted_parents: set[Path] = set()
 
     async def start(self) -> None:
         self.started_at = datetime.now(UTC)
@@ -246,9 +249,11 @@ class Run:
         """
         from icloudpd_web.runner.post_filter import evaluate
 
+        filters = self._filters
+        assert filters is not None  # _maybe_filter only schedules us when set
         loop = asyncio.get_running_loop()
         try:
-            decision = await loop.run_in_executor(None, evaluate, path, self._filters)
+            decision = await loop.run_in_executor(None, evaluate, path, filters)
         except Exception as exc:  # noqa: BLE001
             self._emit_log(f"WARNING  Filter: evaluation failed for {path}: {exc}")
             return
@@ -260,9 +265,42 @@ class Run:
         try:
             await loop.run_in_executor(None, os.unlink, decision.path)
             self._filter_deleted += 1
+            self._filter_deleted_parents.add(decision.path.parent)
             self._emit_log(f"INFO     Filter: deleted {path} ({decision.reason})")
         except OSError as exc:
             self._emit_log(f"WARNING  Filter: could not delete {path}: {exc}")
+
+    def _prune_empty_dirs(self) -> list[Path]:
+        """Remove directories left empty by filter deletions.
+
+        Starting from the parent of each deleted file, walk upward removing
+        directories with os.rmdir — which refuses to remove a non-empty dir,
+        so a folder that still holds kept files (or anything else) stops the
+        walk. Bounded by the target directory, which is never removed; without
+        a target directory nothing is pruned. Called only after the run has
+        exited and all filter tasks finished, so no download can race the
+        rmdir.
+        """
+        if self._target_directory is None or not self._filter_deleted_parents:
+            return []
+        try:
+            root = self._target_directory.resolve()
+        except OSError:
+            return []
+        removed: list[Path] = []
+        for parent in self._filter_deleted_parents:
+            try:
+                cur = parent.resolve()
+            except OSError:
+                continue
+            while cur != root and root in cur.parents:
+                try:
+                    cur.rmdir()
+                except OSError:
+                    break  # not empty (or already gone via another branch)
+                removed.append(cur)
+                cur = cur.parent
+        return removed
 
     def _emit_log(self, text: str) -> None:
         # Prepend a timestamp so our own log lines (filter events, wrapper
@@ -398,9 +436,14 @@ class Run:
             elif final_status == "success":
                 if self._filter_tasks:
                     await asyncio.gather(*self._filter_tasks, return_exceptions=True)
+                loop = asyncio.get_running_loop()
+                pruned = await loop.run_in_executor(None, self._prune_empty_dirs)
+                for d in pruned:
+                    self._emit_log(f"INFO     Filter: removed empty folder {d}")
                 self._emit_log(
                     f"INFO     Filter summary: kept {self._filter_kept}, "
-                    f"deleted {self._filter_deleted}"
+                    f"deleted {self._filter_deleted}, "
+                    f"removed {len(pruned)} empty folder(s)"
                 )
 
         self.status = final_status

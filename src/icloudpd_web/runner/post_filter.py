@@ -84,13 +84,16 @@ def _check_exif(path: Path, filters: Filters) -> FilterDecision | None:
 
     make, model = _read_exif_make_model(path)
 
-    # Fail-open on unreadable EXIF: Pillow (even with pillow-heif) cannot
-    # open every format Apple serves (RAW: .dng/.cr2/.nef/.arw). Deleting
-    # on "can't read" would mass-delete real photos, so keep the file and
-    # flag the decision as a warning instead.
+    # Missing/unreadable EXIF (screenshots, web saves, formats Pillow can't
+    # parse) is governed by exif_fallback: "keep" fails open with a warning
+    # (default), "delete" treats no-device-info as non-matching. TIFF-based
+    # RAW (.dng/.cr2/.nef/.arw) headers are usually readable via Pillow's
+    # TIFF plugin, so real camera photos rarely land in this branch.
     if filters.device_makes:
         wanted_makes = [x.strip().lower() for x in filters.device_makes if x.strip()]
         if make is None:
+            if filters.exif_fallback == "delete":
+                return FilterDecision(path, False, "no readable EXIF Make (exif_fallback=delete)")
             return FilterDecision(
                 path,
                 True,
@@ -106,6 +109,8 @@ def _check_exif(path: Path, filters: Filters) -> FilterDecision | None:
     if filters.device_models:
         wanted_models = [x.strip().lower() for x in filters.device_models if x.strip()]
         if model is None:
+            if filters.exif_fallback == "delete":
+                return FilterDecision(path, False, "no readable EXIF Model (exif_fallback=delete)")
             return FilterDecision(
                 path,
                 True,
@@ -127,8 +132,9 @@ def evaluate(path: Path, filters: Filters) -> FilterDecision:
     AND across fields, OR within a field.
     - file_suffixes: case-insensitive extension match.
     - match_patterns: regex applied to basename; any match passes.
-    - device_makes / device_models: EXIF Make/Model; fail-open on unreadable EXIF
-      (file kept, decision flagged as warning).
+    - device_makes / device_models: EXIF Make/Model. Missing/unreadable EXIF
+      follows filters.exif_fallback: "keep" fails open (file kept, decision
+      flagged as warning), "delete" treats it as non-matching.
       Non-image files (videos, etc.) skip EXIF filters entirely.
     """
     suffix = path.suffix.lower()

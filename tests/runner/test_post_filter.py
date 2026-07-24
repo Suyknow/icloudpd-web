@@ -221,6 +221,64 @@ def test_unsupported_raw_fails_open(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# exif_fallback="delete": missing/unreadable EXIF treated as non-matching
+# ---------------------------------------------------------------------------
+
+
+def test_exif_fallback_delete_missing_make(tmp_path: Path) -> None:
+    img = tmp_path / "screenshot.png"
+    img.write_bytes(b"fake")
+    f = Filters(device_makes=["Apple"], exif_fallback="delete")
+    with patch(
+        "icloudpd_web.runner.post_filter._read_exif_make_model",
+        side_effect=_make_exif_mock(None, None),
+    ):
+        d = evaluate(img, f)
+        assert d.kept is False
+        assert "exif_fallback=delete" in d.reason
+
+
+def test_exif_fallback_delete_missing_model(tmp_path: Path) -> None:
+    img = tmp_path / "photo.jpg"
+    img.write_bytes(b"fake")
+    f = Filters(device_models=["iPhone 15 Pro"], exif_fallback="delete")
+    with patch(
+        "icloudpd_web.runner.post_filter._read_exif_make_model",
+        side_effect=_make_exif_mock("Apple", None),
+    ):
+        d = evaluate(img, f)
+        assert d.kept is False
+        assert "exif_fallback=delete" in d.reason
+
+
+def test_exif_fallback_delete_readable_exif_still_matches(tmp_path: Path) -> None:
+    """The fallback only fires on missing EXIF; readable EXIF matches as usual."""
+    img = tmp_path / "photo.jpg"
+    img.write_bytes(b"fake")
+    f = Filters(device_makes=["Apple"], exif_fallback="delete")
+    with patch(
+        "icloudpd_web.runner.post_filter._read_exif_make_model",
+        side_effect=_make_exif_mock("Apple", "iPhone 15"),
+    ):
+        assert evaluate(img, f).kept is True
+
+
+def test_exif_fallback_delete_ignores_non_images() -> None:
+    """Videos never carry EXIF; the fallback must not delete them."""
+    f = Filters(device_makes=["Apple"], exif_fallback="delete")
+    assert evaluate(_path("video.mp4"), f).kept is True
+
+
+def test_exif_fallback_default_is_keep() -> None:
+    assert Filters().exif_fallback == "keep"
+
+
+def test_exif_fallback_invalid_value_rejected() -> None:
+    with pytest.raises(ValidationError):
+        Filters(exif_fallback="nuke")  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
 # non-image files skip EXIF filters
 # ---------------------------------------------------------------------------
 

@@ -18,6 +18,10 @@ class Filters(BaseModel):
     match_patterns: list[str] = Field(default_factory=list)
     device_makes: list[str] = Field(default_factory=list)
     device_models: list[str] = Field(default_factory=list)
+    # What to do when a device filter is configured but the file has no
+    # readable EXIF Make/Model (screenshots, web saves, unparseable formats):
+    # "keep" fails open (default), "delete" treats missing EXIF as non-matching.
+    exif_fallback: Literal["keep", "delete"] = "keep"
 
     @field_validator("match_patterns")
     @classmethod

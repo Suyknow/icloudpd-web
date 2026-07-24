@@ -7,11 +7,16 @@ export interface PolicyAwsConfig {
   secret_access_key?: string;
 }
 
+export type ExifFallback = "keep" | "delete";
+
 export interface Filters {
   file_suffixes: string[];
   match_patterns: string[];
   device_makes: string[];
   device_models: string[];
+  /** What to do when a device filter is set but the file has no readable
+   * EXIF Make/Model. Older backends may omit it; treat missing as "keep". */
+  exif_fallback?: ExifFallback;
 }
 
 export type LibraryKind = "personal" | "shared";

@@ -288,6 +288,7 @@ export interface PostDownloadFilterValues {
   filter_match_patterns: string[];
   filter_device_makes: string[];
   filter_device_models: string[];
+  filter_exif_fallback: "keep" | "delete";
 }
 
 interface PostDownloadFiltersSectionProps {
@@ -307,11 +308,13 @@ export function PostDownloadFiltersSection({
   onChange,
   icloudDeleteConfigured = false,
 }: PostDownloadFiltersSectionProps) {
+  const deviceFilterConfigured =
+    values.filter_device_makes.length > 0 ||
+    values.filter_device_models.length > 0;
   const anyFilterConfigured =
     values.filter_file_suffixes.length > 0 ||
     values.filter_match_patterns.length > 0 ||
-    values.filter_device_makes.length > 0 ||
-    values.filter_device_models.length > 0;
+    deviceFilterConfigured;
   return (
     <VStack spacing={4} align="stretch">
       <Alert status="warning" borderRadius="md" fontSize="sm">
@@ -362,6 +365,24 @@ export function PostDownloadFiltersSection({
         onChange={(v) => onChange("filter_device_models", v)}
         placeholder="iPhone 15 Pro ..."
       />
+      {deviceFilterConfigured && (
+        <FormControl>
+          <FieldWithInfo
+            label="Delete images without readable device info"
+            info="Applies when a device make/model filter is set but an image has no readable EXIF Make/Model — screenshots, images saved from the web, or formats whose metadata can't be parsed. Off (default): keep such images and log a warning. On: delete them like any other non-matching file. Videos are never affected."
+          >
+            <Switch
+              isChecked={values.filter_exif_fallback === "delete"}
+              onChange={(e) =>
+                onChange(
+                  "filter_exif_fallback",
+                  e.target.checked ? "delete" : "keep",
+                )
+              }
+            />
+          </FieldWithInfo>
+        </FormControl>
+      )}
     </VStack>
   );
 }

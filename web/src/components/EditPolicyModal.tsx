@@ -622,8 +622,14 @@ export function EditPolicyModal({
                   filter_match_patterns: formData.filter_match_patterns,
                   filter_device_makes: formData.filter_device_makes,
                   filter_device_models: formData.filter_device_models,
+                  filter_exif_fallback: formData.filter_exif_fallback,
                 }}
-                onChange={(key, value) => update(key, value)}
+                onChange={(key, value) =>
+                  // Every PostDownloadFilterValues key exists on FormPolicy
+                  // with the identical type, so the cast is sound; TS just
+                  // can't correlate the two generics through the callback.
+                  update(key, value as FormPolicy[typeof key])
+                }
                 icloudDeleteConfigured={
                   formData.keep_icloud_recent_days !== null ||
                   Boolean(

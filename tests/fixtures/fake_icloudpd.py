@@ -21,6 +21,7 @@ Behavior driven by env vars:
   FAKE_ICLOUDPD_TOTAL: default 5
   FAKE_ICLOUDPD_SLEEP: seconds between progress lines (default 0.01)
   FAKE_ICLOUDPD_DIR: target directory for filter_demo mode
+  FAKE_ICLOUDPD_NESTED: "1" puts filter_demo files in date-style subfolders
 """
 
 from __future__ import annotations
@@ -218,17 +219,26 @@ def _write_minimal_png(path: str) -> None:
 
 
 def _run_filter_demo() -> int:
-    """Create test image files in FAKE_ICLOUDPD_DIR and print Downloaded lines."""
+    """Create test image files in FAKE_ICLOUDPD_DIR and print Downloaded lines.
+
+    With FAKE_ICLOUDPD_NESTED=1, files land in date-style subfolders (like a
+    real folder_structure pattern) instead of flat in the target directory.
+    """
     target_dir = os.environ.get("FAKE_ICLOUDPD_DIR", "/tmp")
+    nested = os.environ.get("FAKE_ICLOUDPD_NESTED") == "1"
     os.makedirs(target_dir, exist_ok=True)
 
+    def _dest(subdir: str, name: str) -> str:
+        return os.path.join(target_dir, subdir, name) if nested else os.path.join(target_dir, name)
+
     files = [
-        (os.path.join(target_dir, "img_apple.heic"), "heic", "Apple", "iPhone 15 Pro"),
-        (os.path.join(target_dir, "img_samsung.jpg"), "jpg", "Samsung", "Galaxy S24"),
-        (os.path.join(target_dir, "other.png"), "png", None, None),
+        (_dest("2026/07/23", "img_apple.heic"), "heic", "Apple", "iPhone 15 Pro"),
+        (_dest("2026/07/24", "img_samsung.jpg"), "jpg", "Samsung", "Galaxy S24"),
+        (_dest("2026/07/24", "other.png"), "png", None, None),
     ]
 
     for file_path, kind, make, model in files:
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
         if kind == "heic" and make and model:
             _write_minimal_heic(file_path, make, model)
         elif kind == "jpg" and make and model:
