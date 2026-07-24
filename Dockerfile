@@ -27,13 +27,14 @@ WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
 
-# Copy built frontend assets from Stage 1
-COPY --from=frontend /app/src/icloudpd_web/web_dist ./src/icloudpd_web/web_dist
+# Copy built frontend assets to a temp location OUTSIDE src/ so hatchling's
+# `packages` directive won't also include them (causing duplicate-path error
+# with force-include when .git is absent in Docker).
+COPY --from=frontend /app/src/icloudpd_web/web_dist ./web_dist
 
-# Build wheel with uv (avoids pip build-isolation hatchling duplicate-path
-# error with force-include), then install the built wheel.
-RUN pip install --no-cache-dir uv && uv build --wheel
-RUN pip install --no-cache-dir dist/icloudpd_web-*.whl
+# Point wheel force-include at the temp location, then build & install.
+RUN sed -i 's|"src/icloudpd_web/web_dist" = "icloudpd_web/web_dist"|"web_dist" = "icloudpd_web/web_dist"|' pyproject.toml
+RUN pip install --no-cache-dir .
 
 # Install entrypoint with execute bit BEFORE switching to non-root user.
 COPY docker-entrypoint.sh /usr/local/bin/
