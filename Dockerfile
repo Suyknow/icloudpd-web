@@ -30,8 +30,10 @@ COPY src ./src
 # Copy built frontend assets from Stage 1
 COPY --from=frontend /app/src/icloudpd_web/web_dist ./src/icloudpd_web/web_dist
 
-# Install the package from local source (includes web_dist via hatch force-include)
-RUN pip install --no-cache-dir .
+# Build wheel with uv (avoids pip build-isolation hatchling duplicate-path
+# error with force-include), then install the built wheel.
+RUN pip install --no-cache-dir uv && uv build --wheel
+RUN pip install --no-cache-dir dist/icloudpd_web-*.whl
 
 # Install entrypoint with execute bit BEFORE switching to non-root user.
 COPY docker-entrypoint.sh /usr/local/bin/
