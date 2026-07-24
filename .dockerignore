@@ -20,5 +20,3 @@ var/
 *.egg
 .git
 .gitignore
-README.md
-*.md

@@ -10,7 +10,7 @@ docker run -d \
   -p 5000:5000 \
   -v ./data:/data \
   -v ./downloads:/downloads \
-  spicadust/icloudpd-web:latest
+  ghcr.io/suyknow/icloudpd-web:latest
 ```
 
 `/data` holds policies, secrets, cookies and run logs. `/downloads` is where
@@ -39,13 +39,30 @@ your policies write photos — mount any host directories your policies'
 - `DATA_DIR`: path for persistent state inside the container (default: `/data`)
 - `PASSWORD_HASH`: scrypt hash of the server password. Generate with:
   ```bash
-  docker run --rm spicadust/icloudpd-web:latest icloudpd-web init-password 'yourpw'
+  docker run --rm ghcr.io/suyknow/icloudpd-web:latest icloudpd-web init-password 'yourpw'
   ```
   If unset, the server runs passwordless (see the warning above), logs a
   warning on startup, and the UI shows a persistent banner.
 - `SESSION_SECRET`: stable session secret across restarts. If unset, a random
   one is generated on each boot and all sessions are invalidated on restart.
   Generate with: `python -c "import secrets; print(secrets.token_urlsafe(32))"`
+- `REQUIRE_MOUNTED_FILE`: when `true` (default), the runner refuses to start a
+  policy if the target download directory does not contain a `.mounted`
+  sentinel file. This prevents writes to an unmounted bind-mount. Set to
+  `false` to disable.
+
+## `.mounted` Safety Check
+
+To prevent icloudpd from writing files into an empty/unmounted bind-mount,
+the runner checks for a `.mounted` sentinel file in the policy's target
+directory (or any parent) before starting a run.
+
+```bash
+# Create the sentinel in your download directory on the host
+touch ./downloads/.mounted
+```
+
+Set `REQUIRE_MOUNTED_FILE=false` to disable this check.
 
 ## Using Docker Compose
 

@@ -1,11 +1,9 @@
 services:
   icloudpd-web:
-    image: spicadust/icloudpd-web:latest
-    # Uncomment to build locally instead of pulling:
+    image: ghcr.io/suyknow/icloudpd-web:latest
+    # To build locally instead of pulling:
     # build:
     #   context: .
-    #   args:
-    #     VERSION: 2026.4.20.post1
     container_name: icloudpd-web
     restart: unless-stopped
     ports:
@@ -22,7 +20,7 @@ services:
       PGID: 1000
 
       # REQUIRED to enable authentication. Generate with:
-      #   docker run --rm spicadust/icloudpd-web:latest icloudpd-web init-password 'yourpw'
+      #   docker run --rm ghcr.io/suyknow/icloudpd-web:latest icloudpd-web init-password 'yourpw'
       # If omitted, the server runs PASSWORDLESS (warning logged on startup).
       PASSWORD_HASH: ${ICLOUDPD_WEB_PASSWORD_HASH:-}
 
@@ -30,6 +28,10 @@ services:
       # is generated each boot and all sessions are invalidated on restart).
       # Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
       SESSION_SECRET: ${ICLOUDPD_WEB_SESSION_SECRET:-}
+
+      # .mounted safety check: refuse to run if the target download directory
+      # does not contain a .mounted sentinel file. Set to "false" to disable.
+      REQUIRE_MOUNTED_FILE: "true"
 
     volumes:
       # Persistent state: policies (TOML), passwords, cookies, run logs,

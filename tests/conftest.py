@@ -1,7 +1,13 @@
+import os
 import sys
 from pathlib import Path
 
 import pytest
+
+
+# Disable the .mounted safety check in tests — test temp dirs don't have
+# the sentinel file.
+os.environ.setdefault("REQUIRE_MOUNTED_FILE", "false")
 
 
 FIXTURES = Path(__file__).parent / "fixtures"

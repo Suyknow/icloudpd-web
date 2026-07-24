@@ -1,9 +1,16 @@
 # icloudpd-web
 
+> **Fork** of [AirswitchAsa/icloudpd-web](https://github.com/AirswitchAsa/icloudpd-web) with the following additions:
+>
+> - **Docker Automation** — GitHub Actions workflow for automatic Docker image building and publishing to GHCR.
+> - **Multi-stage Dockerfile** — Builds the React frontend and Python backend from source (no PyPI dependency).
+> - **`.mounted` Safety Check** — Refuses to run a policy if the target download directory does not contain a `.mounted` sentinel file, preventing accidental writes to an unmounted volume.
+> - **Library Discovery Fix** — The `--list-libraries` subprocess now inherits the exact same argv as a normal download, preventing Apple 421 rate-limits from endpoint/credential mismatches (e.g. `--domain cn`).
+
 ## Release
 
 - [Python Package](https://pypi.org/project/icloudpd-web/)
-- [Docker Image](https://hub.docker.com/r/spicadust/icloudpd-web)
+- [Docker Image](https://github.com/Suyknow/icloudpd-web/pkgs/container/icloudpd-web)
 
 ## Overview
 
@@ -25,6 +32,22 @@ Requires Python 3.12+.
 ```bash
 pipx install icloudpd-web
 ```
+
+### Docker (Recommended)
+
+```bash
+docker run -d \
+  --name icloudpd-web \
+  --restart=unless-stopped \
+  -p 5000:5000 \
+  -v ./data:/data \
+  -v ./downloads:/downloads \
+  -e PASSWORD_HASH='<scrypt hash>' \
+  -e SESSION_SECRET='<random string>' \
+  ghcr.io/suyknow/icloudpd-web:latest
+```
+
+See [README.docker.md](README.docker.md) for full environment variables, PUID/PGID, and `.mounted` safety check details.
 
 ## Development
 

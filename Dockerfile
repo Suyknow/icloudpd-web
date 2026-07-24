@@ -1,13 +1,37 @@
-FROM python:3.12.8-slim
+# Stage 1: Build Frontend
+FROM node:20-slim AS frontend
 
-ARG VERSION
+WORKDIR /app/web
+
+# Copy package files and install dependencies
+COPY web/package*.json ./
+RUN npm ci
+
+# Copy the rest of the frontend source
+COPY web/ .
+
+# Build: outputs to ../src/icloudpd_web/web_dist (relative to /app/web)
+RUN npm run build
+
+# Stage 2: Runtime
+FROM python:3.12.8-slim
 
 # curl is used by HEALTHCHECK; gosu drops root -> appuser in the entrypoint.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl gosu \
  && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir "icloudpd-web==${VERSION}"
+WORKDIR /app
+
+# Copy backend source and metadata
+COPY pyproject.toml README.md LICENSE ./
+COPY src ./src
+
+# Copy built frontend assets from Stage 1
+COPY --from=frontend /app/src/icloudpd_web/web_dist ./src/icloudpd_web/web_dist
+
+# Install the package from local source (includes web_dist via hatch force-include)
+RUN pip install --no-cache-dir .
 
 # Install entrypoint with execute bit BEFORE switching to non-root user.
 COPY docker-entrypoint.sh /usr/local/bin/

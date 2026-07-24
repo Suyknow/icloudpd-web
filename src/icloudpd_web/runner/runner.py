@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,6 +18,32 @@ from .run import Run
 
 if TYPE_CHECKING:
     from .mfa import MfaRegistry
+
+
+def _check_mounted(directory: Path) -> None:
+    """Verify that *directory* (or one of its parents) contains a .mounted
+    sentinel file, indicating the volume is actually mounted.
+
+    This prevents icloudpd from writing to an unmounted bind-mount and
+    creating thousands of files in the container's empty mount-point.
+
+    Controlled by the REQUIRE_MOUNTED_FILE environment variable (default:
+    true).  Set REQUIRE_MOUNTED_FILE=false to disable this check.
+    """
+    if os.environ.get("REQUIRE_MOUNTED_FILE", "true").lower() == "false":
+        return
+    check = directory.resolve()
+    for candidate in [check, *check.parents]:
+        if (candidate / ".mounted").exists():
+            return
+        if candidate == candidate.parent:
+            break
+    raise RuntimeError(
+        f"Safety check failed: no .mounted sentinel file found in "
+        f"{directory} or its parents. Place a file named '.mounted' in "
+        "your download directory to confirm the volume is mounted, or set "
+        "REQUIRE_MOUNTED_FILE=false to disable this check."
+    )
 
 
 class Runner:
@@ -85,6 +112,9 @@ class Runner:
                 f"password is required to start policy {policy.name!r}; "
                 "set a password via the secrets API first"
             )
+        # Verify the download directory is actually mounted before doing
+        # anything that might write to it.
+        _check_mounted(policy.directory)
         # Guard against folder-structure drift before spending any time on
         # auth. If the target directory already has a .folderstructure that
         # disagrees with the policy, refuse to start.
@@ -219,22 +249,15 @@ class Runner:
             log_dir = self._runs_base / policy.name
             log_dir.mkdir(parents=True, exist_ok=True)
 
-            argv_tail = [
-                "--username",
-                policy.username,
-                "--directory",
-                str(policy.directory),
-                "--password-provider",
-                "console",
-                "--mfa-provider",
-                "console",
-                "--list-libraries",
-            ]
-            # Same cookie handling as a download run: policy override wins,
-            # else the persistent default (so discovery reuses the session).
-            cookie_dir = policy.icloudpd.get("cookie_directory") or self._ensure_cookie_directory()
-            if cookie_dir:
-                argv_tail += ["--cookie-directory", str(cookie_dir)]
+            # Build the identical argv as a normal download, then append
+            # --list-libraries. This ensures all contextual flags (--domain,
+            # --cookie-directory, etc.) match the real download run exactly,
+            # preventing 421 rate-limits from endpoint/credential mismatches.
+            argv_tail = build_argv(
+                policy,
+                default_cookie_directory=self._ensure_cookie_directory(),
+            )
+            argv_tail.append("--list-libraries")
             argv = self._argv_fn(argv_tail)
 
             on_mfa_needed = None
