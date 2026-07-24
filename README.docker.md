@@ -1,6 +1,6 @@
 # icloudpd-web Docker Image
 
-Current package version: 2026.7.23
+Current package version: 2026.7.24
 
 ## Quick Start
 
