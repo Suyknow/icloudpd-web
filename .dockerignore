@@ -20,5 +20,12 @@ var/
 *.egg
 .git
 .gitignore
-README.md
-*.md
+node_modules/
+web/node_modules/
+web/dist/
+src/icloudpd_web/web_dist
+.env
+.env.*
+.venv/
+data/
+.dev-data/

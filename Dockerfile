@@ -1,13 +1,40 @@
-FROM python:3.12.8-slim
+# Stage 1: Build Frontend
+FROM node:20-slim AS frontend
 
-ARG VERSION
+WORKDIR /app/web
+
+# Copy package files and install dependencies
+COPY web/package*.json ./
+RUN npm ci
+
+# Copy the rest of the frontend source
+COPY web/ .
+
+# Build: outputs to ../src/icloudpd_web/web_dist (relative to /app/web)
+RUN npm run build
+
+# Stage 2: Runtime
+FROM python:3.12.8-slim
 
 # curl is used by HEALTHCHECK; gosu drops root -> appuser in the entrypoint.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl gosu \
  && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir "icloudpd-web==${VERSION}"
+WORKDIR /app
+
+# Copy backend source and metadata
+COPY pyproject.toml README.md LICENSE ./
+COPY src ./src
+
+# Copy built frontend assets to a temp location OUTSIDE src/ so hatchling's
+# `packages` directive won't also include them (causing duplicate-path error
+# with force-include when .git is absent in Docker).
+COPY --from=frontend /app/src/icloudpd_web/web_dist ./web_dist
+
+# Point wheel force-include at the temp location, then build & install.
+RUN sed -i 's|"src/icloudpd_web/web_dist" = "icloudpd_web/web_dist"|"web_dist" = "icloudpd_web/web_dist"|' pyproject.toml
+RUN pip install --no-cache-dir .
 
 # Install entrypoint with execute bit BEFORE switching to non-root user.
 COPY docker-entrypoint.sh /usr/local/bin/
@@ -34,7 +61,8 @@ EXPOSE 5000
 # unsetting any of these returns you to the CLI's built-in defaults.
 ENV HOST=0.0.0.0 \
     PORT=5000 \
-    DATA_DIR=/data
+    DATA_DIR=/data \
+    REQUIRE_MOUNTED_FILE=true
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -fsS "http://127.0.0.1:${PORT}/auth/status" >/dev/null || exit 1
