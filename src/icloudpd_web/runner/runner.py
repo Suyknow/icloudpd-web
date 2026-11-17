@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,6 +18,39 @@ from .run import WRONG_DOMAIN_HINT, Run
 
 if TYPE_CHECKING:
     from .mfa import MfaRegistry
+
+
+def _check_mounted(directory: Path) -> None:
+    """Verify that *directory* (or one of its parents) contains a .mounted
+    sentinel file, indicating the volume is actually mounted.
+
+    This prevents icloudpd from writing to an unmounted bind-mount and
+    creating thousands of files in the container's empty mount-point.
+
+    Controlled by the REQUIRE_MOUNTED_FILE environment variable (default:
+    false). The Docker image sets it to true so container users get the
+    check by default, while source/pipx installs keep upstream behavior.
+    Set REQUIRE_MOUNTED_FILE=true to enable, false/0/no/off to disable.
+    """
+    if os.environ.get("REQUIRE_MOUNTED_FILE", "false").strip().lower() not in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        return
+    check = directory.resolve()
+    for candidate in [check, *check.parents]:
+        if (candidate / ".mounted").exists():
+            return
+        if candidate == candidate.parent:
+            break
+    raise RuntimeError(
+        f"Safety check failed: no .mounted sentinel file found in "
+        f"{directory} or its parents. Place a file named '.mounted' in "
+        "your download directory to confirm the volume is mounted, or set "
+        "REQUIRE_MOUNTED_FILE=false to disable this check."
+    )
 
 
 class Runner:
@@ -85,6 +119,9 @@ class Runner:
                 f"password is required to start policy {policy.name!r}; "
                 "set a password via the secrets API first"
             )
+        # Verify the download directory is actually mounted before doing
+        # anything that might write to it.
+        _check_mounted(policy.directory)
         # Guard against folder-structure drift before spending any time on
         # auth. If the target directory already has a .folderstructure that
         # disagrees with the policy, refuse to start.
